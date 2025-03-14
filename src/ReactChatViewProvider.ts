@@ -317,6 +317,7 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                     overflow-y: auto;
                     margin-bottom: 10px;
                     padding: 5px;
+                    scroll-behavior: smooth;
                 }
                 #inputArea { 
                     display: flex;
@@ -683,6 +684,9 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                     const messageDiv = document.createElement('div');
                     messageDiv.className = 'message ' + type + '-message';
                     
+                    // Verificar se o usuário está próximo do final antes de adicionar a mensagem
+                    const shouldScroll = chatDiv.scrollTop + chatDiv.clientHeight >= chatDiv.scrollHeight - 100;
+                    
                     // Adicionar contexto do arquivo se disponível
                     if (metadata.currentFile) {
                         const fileContext = document.createElement('div');
@@ -737,7 +741,13 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                     }
 
                     chatDiv.appendChild(messageDiv);
-                    chatDiv.scrollTop = chatDiv.scrollHeight;
+                    
+                    // Só rolar para o final se o usuário estiver próximo do final
+                    if (shouldScroll) {
+                        setTimeout(() => {
+                            messageDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                        }, 100);
+                    }
                 }
 
                 function showNotification(text) {
@@ -809,6 +819,10 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                         message.history.forEach(msg => {
                             appendMessage(msg.text, msg.type, msg.timestamp, msg.metadata);
                         });
+                        // Garantir que após carregar o histórico, role para o final
+                        setTimeout(() => {
+                            chatDiv.scrollTop = chatDiv.scrollHeight;
+                        }, 100);
                     } else if (message.type === 'clearChat') {
                         chatDiv.innerHTML = '';
                         input.value = '';
