@@ -1,8 +1,15 @@
 import * as vscode from 'vscode';
 import { ReactCodeGenerator } from './utils/codeGenerator';
 
+interface ChatStats {
+    filesCreated: number;
+    filesModified: number;
+    componentsGenerated: number;
+    lastModified: string[];
+}
+
 interface ChatMessage {
-    type: 'user' | 'assistant' | 'error' | 'code' | 'system' | 'suggestion';
+    type: 'user' | 'assistant' | 'error' | 'code' | 'system' | 'suggestion' | 'stats';
     text: string;
     timestamp: number;
     metadata?: {
@@ -13,6 +20,8 @@ interface ChatMessage {
         currentFile?: string;
         suggestions?: string[];
         codeLanguage?: string;
+        stats?: ChatStats;
+        undoAvailable?: boolean;
     };
 }
 
@@ -21,7 +30,14 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     private codeGenerator: ReactCodeGenerator;
     private static readonly CHAT_HISTORY_KEY = 'reactChatHistory';
+    private static readonly CHAT_STATS_KEY = 'reactChatStats';
     private currentFile?: string;
+    private stats: ChatStats = {
+        filesCreated: 0,
+        filesModified: 0,
+        componentsGenerated: 0,
+        lastModified: []
+    };
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -29,6 +45,56 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
     ) {
         this.codeGenerator = new ReactCodeGenerator();
         this.setupFileChangeListener();
+        this.loadStats();
+    }
+
+    private async loadStats() {
+        const savedStats = this._context.globalState.get<ChatStats>(ReactChatViewProvider.CHAT_STATS_KEY);
+        if (savedStats) {
+            this.stats = savedStats;
+        }
+    }
+
+    private async updateStats(action: 'create' | 'modify', fileName: string) {
+        if (action === 'create') {
+            this.stats.filesCreated++;
+        } else {
+            this.stats.filesModified++;
+        }
+        
+        // Manter apenas os últimos 5 arquivos modificados
+        this.stats.lastModified = [fileName, ...this.stats.lastModified.slice(0, 4)];
+        
+        await this._context.globalState.update(ReactChatViewProvider.CHAT_STATS_KEY, this.stats);
+        
+        // Enviar atualização para o webview
+        this.sendStatsUpdate();
+    }
+
+    private async sendStatsUpdate() {
+        if (this._view) {
+            const statsMessage = this.formatStats();
+            await this.saveMessage({
+                type: 'stats',
+                text: statsMessage,
+                timestamp: Date.now(),
+                metadata: { stats: this.stats }
+            });
+            
+            this._view.webview.postMessage({
+                type: 'statsUpdate',
+                stats: this.stats,
+                text: statsMessage
+            });
+        }
+    }
+
+    private formatStats(): string {
+        return `📊 Estatísticas do Projeto:
+• Arquivos Criados: ${this.stats.filesCreated}
+• Arquivos Modificados: ${this.stats.filesModified}
+• Componentes Gerados: ${this.stats.componentsGenerated}
+${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + this.stats.lastModified.map(f => `• ${f}`).join('\n') : ''}`;
     }
 
     private setupFileChangeListener() {
@@ -206,6 +272,10 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                         type: 'setInput', 
                         text: suggestion 
                     });
+                } else if (message.command === 'showStats') {
+                    vscode.postMessage({ command: 'showStats' });
+                } else if (message.command === 'undo') {
+                    vscode.postMessage({ command: 'undo' });
                 }
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -437,26 +507,107 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                     font-style: italic;
                     font-size: 13px;
                 }
+                .toolbar {
+                    display: flex;
+                    gap: 8px;
+                    padding: 8px;
+                    background-color: var(--vscode-editor-background);
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                }
+                
+                .stats-panel {
+                    background-color: var(--vscode-editor-inactiveSelectionBackground);
+                    border-radius: 6px;
+                    padding: 12px;
+                    margin: 8px 0;
+                    font-size: 12px;
+                }
+                
+                .action-button {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 6px 12px;
+                    border-radius: 4px;
+                    border: 1px solid var(--vscode-button-border);
+                    background-color: var(--vscode-button-secondaryBackground);
+                    color: var(--vscode-button-secondaryForeground);
+                    cursor: pointer;
+                    font-size: 12px;
+                    transition: all 0.2s;
+                }
+                
+                .action-button:hover {
+                    background-color: var(--vscode-button-secondaryHoverBackground);
+                }
+                
+                .action-button.primary {
+                    background-color: var(--vscode-button-background);
+                    color: var(--vscode-button-foreground);
+                }
+                
+                .action-button.primary:hover {
+                    background-color: var(--vscode-button-hoverBackground);
+                }
+                
+                .action-button.warning {
+                    background-color: var(--vscode-errorForeground);
+                    color: var(--vscode-button-foreground);
+                }
+                
+                .action-button.warning:hover {
+                    opacity: 0.9;
+                }
+                
+                .action-button[disabled] {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                }
+                
+                .stats-badge {
+                    background-color: var(--vscode-badge-background);
+                    color: var(--vscode-badge-foreground);
+                    padding: 2px 6px;
+                    border-radius: 10px;
+                    font-size: 10px;
+                }
+                
+                .divider {
+                    width: 1px;
+                    background-color: var(--vscode-panel-border);
+                    margin: 0 4px;
+                }
             </style>
         </head>
         <body>
+            <div class="toolbar">
+                <button class="action-button" id="statsBtn" title="Ver estatísticas">
+                    📊 Stats
+                    <span class="stats-badge" id="statsCount">0</span>
+                </button>
+                <div class="divider"></div>
+                <button class="action-button" id="undoBtn" title="Desfazer última alteração" disabled>
+                    ↩️ Desfazer
+                </button>
+                <button class="action-button warning" id="clearBtn" title="Limpar histórico">
+                    🗑️ Limpar
+                </button>
+            </div>
+            
             <div id="chat">
                 <div class="placeholder">Carregando...</div>
             </div>
+            
             <div id="inputArea">
-                <div class="button-container">
-                    <button id="clearBtn" title="Limpar histórico">🗑️</button>
-                </div>
                 <textarea id="userInput" 
                     placeholder="Digite seu comando... (Ex: Crie um componente de tabela de usuários com paginação)"
                     rows="1"></textarea>
-                <div class="button-container">
-                    <button id="sendBtn">
-                        <span class="loading" style="display: none;"></span>
-                        <span>Gerar</span>
-                    </button>
-                </div>
+                <button class="action-button primary" id="sendBtn">
+                    <span class="loading" style="display: none;"></span>
+                    <span>Gerar Código</span>
+                </button>
             </div>
+            
             <script>
                 const vscode = acquireVsCodeApi();
                 const chatDiv = document.getElementById('chat');
@@ -464,6 +615,9 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                 const sendBtn = document.getElementById('sendBtn');
                 const clearBtn = document.getElementById('clearBtn');
                 const loading = sendBtn.querySelector('.loading');
+                const statsBtn = document.getElementById('statsBtn');
+                const undoBtn = document.getElementById('undoBtn');
+                const statsCount = document.getElementById('statsCount');
 
                 function formatTimestamp(timestamp) {
                     return new Date(timestamp).toLocaleTimeString('pt-BR', {
@@ -628,6 +782,14 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                     }
                 });
 
+                statsBtn.addEventListener('click', () => {
+                    vscode.postMessage({ command: 'showStats' });
+                });
+                
+                undoBtn.addEventListener('click', () => {
+                    vscode.postMessage({ command: 'undo' });
+                });
+
                 window.addEventListener('message', event => {
                     const message = event.data;
                     
@@ -655,6 +817,15 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                         input.value = message.text;
                         input.focus();
                         adjustTextareaHeight();
+                    } else if (message.type === 'statsUpdate') {
+                        const total = message.stats.filesCreated + message.stats.filesModified;
+                        statsCount.textContent = total;
+                        
+                        if (message.text) {
+                            appendMessage(message.text, 'stats');
+                        }
+                    } else if (message.type === 'undoAvailable') {
+                        undoBtn.disabled = !message.available;
                     }
                 });
 
