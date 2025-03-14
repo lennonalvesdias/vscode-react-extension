@@ -1,30 +1,32 @@
 export const colors = {
     // Backgrounds
-    background: 'var(--vscode-editor-background)',
-    backgroundLight: 'var(--vscode-editor-lineHighlightBackground)',
-    backgroundInactive: 'var(--vscode-editor-inactiveSelectionBackground)',
+    background: '#1e1e1e',
+    backgroundLight: '#252526',
+    backgroundInactive: '#2d2d2d',
     
     // Text
-    text: 'var(--vscode-editor-foreground)',
-    textSecondary: 'var(--vscode-descriptionForeground)',
-    textPlaceholder: 'var(--vscode-input-placeholderForeground)',
+    text: '#cccccc',
+    textSecondary: '#9d9d9d',
+    textPlaceholder: '#6b6b6b',
+    textLight: '#8a8a8a',
     
     // Borders
-    border: 'var(--vscode-panel-border)',
-    borderFocus: 'var(--vscode-focusBorder)',
+    border: '#3d3d3d',
+    borderFocus: '#007acc',
     
     // Actions
-    primary: 'var(--vscode-button-background)',
+    primary: '#0e639c',
     primaryHover: 'var(--vscode-button-hoverBackground)',
-    secondary: 'var(--vscode-button-secondaryBackground)',
+    secondary: '#3794ff',
     secondaryHover: 'var(--vscode-button-secondaryHoverBackground)',
-    error: 'var(--vscode-errorForeground)',
+    error: '#f14c4c',
+    warning: '#cca700',
     
     // Badges & Chips
-    badge: 'var(--vscode-badge-background)',
-    badgeText: 'var(--vscode-badge-foreground)',
+    badge: '#4d4d4d',
+    badgeText: '#ffffff',
     
     // Notifications
-    notification: 'var(--vscode-notificationToast-background)',
-    notificationText: 'var(--vscode-notificationToast-foreground)'
+    notification: '#1b80b2',
+    notificationText: '#ffffff'
 }; 

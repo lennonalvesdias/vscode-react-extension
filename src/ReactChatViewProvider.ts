@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { ReactCodeGenerator } from './utils/codeGenerator';
-import { baseStyles, buttonStyles, messageStyles, inputStyles } from './design-system';
+import { baseStyles, buttonStyles, inputStyles, messageStyles } from './design-system';
+import { colors } from './design-system/tokens/colors';
+import { spacing } from './design-system/tokens/spacing';
 
 interface ChatStats {
     filesCreated: number;
@@ -308,6 +310,25 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
 
                 .toolbar {
                     ${buttonStyles.base}
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: ${spacing.sm};
+                    border-bottom: 1px solid ${colors.border};
+                }
+
+                .toolbar-group {
+                    display: flex;
+                    gap: ${spacing.sm};
+                }
+
+                .stats-badge {
+                    background: ${colors.badge};
+                    color: ${colors.badgeText};
+                    padding: 2px 6px;
+                    border-radius: 10px;
+                    font-size: 11px;
+                    margin-left: 4px;
                 }
                 
                 #chat { 
@@ -316,22 +337,111 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                     padding: 5px 10px;
                     margin: 0;
                     height: calc(100vh - 140px);
+                    scroll-behavior: smooth;
                 }
 
                 #inputArea { 
                     ${inputStyles.base}
+                    position: relative;
+                    padding: ${spacing.sm};
+                    border-top: 1px solid ${colors.border};
                 }
 
                 #userInput {
                     ${inputStyles.base}
                     ${inputStyles.textarea}
+                    padding-right: 80px; /* Espaço para o contador */
+                }
+
+                .char-counter {
+                    position: absolute;
+                    right: 100px;
+                    bottom: 20px;
+                    font-size: 11px;
+                    color: ${colors.textLight};
+                }
+
+                .scroll-top {
+                    position: fixed;
+                    bottom: 100px;
+                    right: 20px;
+                    background: ${colors.backgroundLight};
+                    border: 1px solid ${colors.border};
+                    border-radius: 50%;
+                    width: 32px;
+                    height: 32px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    opacity: 0;
+                    transition: opacity 0.3s;
+                    z-index: 1000;
+                }
+
+                .scroll-top.visible {
+                    opacity: 0.8;
+                }
+
+                .scroll-top:hover {
+                    opacity: 1;
+                }
+
+                .stats-panel {
+                    background: ${colors.backgroundLight};
+                    border: 1px solid ${colors.border};
+                    border-radius: ${spacing.borderRadius};
+                    padding: ${spacing.md};
+                    margin: ${spacing.sm};
+                }
+
+                .stats-grid {
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: ${spacing.sm};
+                    margin-top: ${spacing.sm};
+                }
+
+                .stats-item {
+                    background: ${colors.backgroundInactive};
+                    padding: ${spacing.sm};
+                    border-radius: ${spacing.borderRadius};
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                }
+
+                .stats-value {
+                    font-size: 24px;
+                    font-weight: bold;
+                    color: ${colors.primary};
+                }
+
+                .stats-label {
+                    font-size: 12px;
+                    color: ${colors.textLight};
+                    margin-top: 4px;
+                }
+
+                .recent-files {
+                    margin-top: ${spacing.md};
+                    padding-top: ${spacing.sm};
+                    border-top: 1px solid ${colors.border};
+                }
+
+                .recent-file {
+                    display: flex;
+                    align-items: center;
+                    gap: ${spacing.xs};
+                    padding: ${spacing.xs} 0;
+                    font-size: 12px;
+                    color: ${colors.textLight};
                 }
 
                 .action-button {
                     ${buttonStyles.base}
-                    ${buttonStyles.secondary}
                 }
-
+                
                 .action-button.primary {
                     ${buttonStyles.primary}
                 }
@@ -419,6 +529,9 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
         </head>
         <body>
             <div class="toolbar">
+                <div class="toolbar-group">
+                    <button class="action-button" id="statsBtn" title="Ver estatísticas">
+                        📊 Stats
                 <button class="action-button" id="statsBtn" title="Ver estatísticas">
                     📊 Stats
                     <span class="stats-badge" id="statsCount">0</span>
