@@ -28,9 +28,19 @@ export class ReactCodeGenerator {
         try {
             const aiResponse = await this.aiHelper.parseRequest(request);
             
+            if (!aiResponse.newName) {
+                throw new Error('Nome do componente não fornecido');
+            }
+
             if (aiResponse.action === 'edit') {
+                if (!aiResponse.oldName) {
+                    throw new Error('Nome do componente a ser editado não fornecido');
+                }
                 return await this.editComponent(aiResponse);
             } else if (aiResponse.action === 'delete') {
+                if (!aiResponse.oldName) {
+                    throw new Error('Nome do componente a ser removido não fornecido');
+                }
                 return await this.deleteComponent(aiResponse);
             }
 

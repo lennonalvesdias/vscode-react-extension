@@ -53,7 +53,7 @@ export class AIHelper {
                     messages: [
                         {
                             role: "system",
-                            content: "Você é um assistente especializado em interpretar comandos para gerar código React. Analise a solicitação e retorne um JSON com a estrutura adequada."
+                            content: "Você é um assistente especializado em interpretar comandos para gerar código React. Analise a solicitação e retorne um JSON com a estrutura adequada. Se o comando mencionar modificar um componente existente, você deve incluir o nome do componente no campo oldName. Se for criar um novo componente, gere um nome apropriado baseado na funcionalidade."
                         },
                         {
                             role: "user",
