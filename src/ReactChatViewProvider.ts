@@ -308,142 +308,79 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
             <style>
                 ${baseStyles}
 
+                body {
+                    display: flex;
+                    flex-direction: column;
+                    height: 100vh;
+                    margin: 0;
+                    padding: 0;
+                    overflow: hidden;
+                }
+
                 .toolbar {
                     ${buttonStyles.base}
                     display: flex;
-                    justify-content: space-between;
                     align-items: center;
-                    padding: ${spacing.sm};
+                    padding: ${spacing.xs} ${spacing.sm};
                     border-bottom: 1px solid ${colors.border};
+                    background: ${colors.backgroundLight};
+                    height: 32px;
                 }
 
-                .toolbar-group {
+                .toolbar-actions {
+                    margin-left: auto;
                     display: flex;
-                    gap: ${spacing.sm};
-                }
-
-                .stats-badge {
-                    background: ${colors.badge};
-                    color: ${colors.badgeText};
-                    padding: 2px 6px;
-                    border-radius: 10px;
-                    font-size: 11px;
-                    margin-left: 4px;
+                    gap: ${spacing.xs};
                 }
                 
                 #chat { 
                     flex: 1;
                     overflow-y: auto;
-                    padding: 5px 10px;
-                    margin: 0;
-                    height: calc(100vh - 140px);
+                    padding: ${spacing.sm};
                     scroll-behavior: smooth;
+                    position: relative;
                 }
 
                 #inputArea { 
                     ${inputStyles.base}
-                    position: relative;
-                    padding: ${spacing.sm};
+                    padding: ${spacing.xs} ${spacing.sm};
                     border-top: 1px solid ${colors.border};
+                    background: ${colors.backgroundLight};
+                    display: flex;
+                    gap: ${spacing.xs};
+                    align-items: flex-start;
                 }
 
                 #userInput {
                     ${inputStyles.base}
                     ${inputStyles.textarea}
-                    padding-right: 80px; /* Espaço para o contador */
-                }
-
-                .char-counter {
-                    position: absolute;
-                    right: 100px;
-                    bottom: 20px;
-                    font-size: 11px;
-                    color: ${colors.textLight};
-                }
-
-                .scroll-top {
-                    position: fixed;
-                    bottom: 100px;
-                    right: 20px;
-                    background: ${colors.backgroundLight};
-                    border: 1px solid ${colors.border};
-                    border-radius: 50%;
-                    width: 32px;
-                    height: 32px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    cursor: pointer;
-                    opacity: 0;
-                    transition: opacity 0.3s;
-                    z-index: 1000;
-                }
-
-                .scroll-top.visible {
-                    opacity: 0.8;
-                }
-
-                .scroll-top:hover {
-                    opacity: 1;
-                }
-
-                .stats-panel {
-                    background: ${colors.backgroundLight};
-                    border: 1px solid ${colors.border};
-                    border-radius: ${spacing.borderRadius};
-                    padding: ${spacing.md};
-                    margin: ${spacing.sm};
-                }
-
-                .stats-grid {
-                    display: grid;
-                    grid-template-columns: repeat(2, 1fr);
-                    gap: ${spacing.sm};
-                    margin-top: ${spacing.sm};
-                }
-
-                .stats-item {
-                    background: ${colors.backgroundInactive};
-                    padding: ${spacing.sm};
-                    border-radius: ${spacing.borderRadius};
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                }
-
-                .stats-value {
-                    font-size: 24px;
-                    font-weight: bold;
-                    color: ${colors.primary};
-                }
-
-                .stats-label {
-                    font-size: 12px;
-                    color: ${colors.textLight};
-                    margin-top: 4px;
-                }
-
-                .recent-files {
-                    margin-top: ${spacing.md};
-                    padding-top: ${spacing.sm};
-                    border-top: 1px solid ${colors.border};
-                }
-
-                .recent-file {
-                    display: flex;
-                    align-items: center;
-                    gap: ${spacing.xs};
-                    padding: ${spacing.xs} 0;
-                    font-size: 12px;
-                    color: ${colors.textLight};
+                    flex: 1;
+                    min-height: 38px;
+                    max-height: 150px;
+                    resize: none;
+                    margin: 0;
                 }
 
                 .action-button {
                     ${buttonStyles.base}
+                    height: 28px;
+                    padding: 0 ${spacing.sm};
+                    display: inline-flex;
+                    align-items: center;
+                    gap: ${spacing.xs};
+                    font-size: 12px;
+                    min-width: auto;
                 }
-                
+
+                .action-button.icon {
+                    width: 28px;
+                    padding: 0;
+                    justify-content: center;
+                }
+
                 .action-button.primary {
                     ${buttonStyles.primary}
+                    height: 38px;
                 }
 
                 .action-button.warning {
@@ -456,6 +393,9 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
 
                 .message {
                     ${messageStyles.base}
+                    margin: ${spacing.xs} 0;
+                    padding: ${spacing.sm};
+                    border-radius: ${spacing.borderRadius};
                 }
 
                 .user-message {
@@ -472,39 +412,90 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
 
                 .system-message {
                     ${messageStyles.system}
+                    font-size: 12px;
+                    padding: ${spacing.xs} ${spacing.sm};
                 }
 
                 .message-timestamp {
                     ${messageStyles.timestamp}
+                    font-size: 10px;
                 }
 
-                .notification {
-                    position: fixed;
-                    bottom: 20px;
-                    right: 20px;
-                    ${messageStyles.error}
-                    animation: fadeInOut 2s ease-in-out forwards;
+                .stats-badge {
+                    background: ${colors.badge};
+                    color: ${colors.badgeText};
+                    padding: 0 6px;
+                    border-radius: 10px;
+                    font-size: 10px;
+                    min-width: 16px;
+                    height: 16px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
                 }
 
-                @keyframes fadeInOut {
-                    0% { opacity: 0; transform: translateY(20px); }
-                    20% { opacity: 1; transform: translateY(0); }
-                    80% { opacity: 1; transform: translateY(0); }
-                    100% { opacity: 0; transform: translateY(-20px); }
+                .stats-panel {
+                    background: ${colors.backgroundLight};
+                    border: 1px solid ${colors.border};
+                    border-radius: ${spacing.borderRadius};
+                    padding: ${spacing.sm};
+                    margin-bottom: ${spacing.sm};
+                }
+
+                .stats-grid {
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: ${spacing.xs};
+                    margin-top: ${spacing.xs};
+                }
+
+                .stats-item {
+                    background: ${colors.backgroundInactive};
+                    padding: ${spacing.xs};
+                    border-radius: ${spacing.borderRadius};
+                    text-align: center;
+                }
+
+                .stats-value {
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: ${colors.primary};
+                }
+
+                .stats-label {
+                    font-size: 11px;
+                    color: ${colors.textSecondary};
+                    margin-top: 2px;
+                }
+
+                .recent-files {
+                    margin-top: ${spacing.sm};
+                    padding-top: ${spacing.xs};
+                    border-top: 1px solid ${colors.border};
+                    font-size: 11px;
+                }
+
+                .recent-file {
+                    display: flex;
+                    align-items: center;
+                    gap: ${spacing.xs};
+                    padding: 2px 0;
+                    color: ${colors.textSecondary};
                 }
 
                 .suggestions {
                     display: flex;
                     flex-wrap: wrap;
-                    gap: 4px;
-                    margin-top: 8px;
+                    gap: ${spacing.xs};
+                    margin-top: ${spacing.xs};
                 }
 
                 .suggestion-chip {
                     ${buttonStyles.base}
                     ${buttonStyles.secondary}
-                    padding: 4px 8px;
+                    padding: 2px ${spacing.xs};
                     font-size: 11px;
+                    height: 20px;
                 }
 
                 .suggestion-chip:hover {
@@ -513,36 +504,83 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
 
                 .loading {
                     display: inline-block;
-                    width: 16px;
-                    height: 16px;
+                    width: 14px;
+                    height: 14px;
                     border: 2px solid currentColor;
                     border-radius: 50%;
                     border-top-color: transparent;
                     animation: spin 1s linear infinite;
-                    margin-right: 8px;
                 }
 
                 @keyframes spin {
                     to {transform: rotate(360deg);}
                 }
+
+                .code-block {
+                    background: ${colors.background};
+                    border: 1px solid ${colors.border};
+                    border-radius: ${spacing.borderRadius};
+                    margin: ${spacing.xs} 0;
+                }
+
+                .code-block-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: ${spacing.xs} ${spacing.sm};
+                    border-bottom: 1px solid ${colors.border};
+                    font-size: 11px;
+                    color: ${colors.textSecondary};
+                }
+
+                .code-block pre {
+                    margin: 0;
+                    padding: ${spacing.sm};
+                    overflow-x: auto;
+                }
+
+                .copy-button {
+                    ${buttonStyles.base}
+                    ${buttonStyles.secondary}
+                    height: 20px;
+                    padding: 0 ${spacing.xs};
+                    font-size: 11px;
+                }
+
+                .notification {
+                    position: fixed;
+                    bottom: ${spacing.sm};
+                    right: ${spacing.sm};
+                    background: ${colors.notification};
+                    color: ${colors.notificationText};
+                    padding: ${spacing.xs} ${spacing.sm};
+                    border-radius: ${spacing.borderRadius};
+                    font-size: 12px;
+                    animation: fadeInOut 2s ease-in-out forwards;
+                    z-index: 1000;
+                }
+
+                @keyframes fadeInOut {
+                    0% { opacity: 0; transform: translateY(10px); }
+                    20% { opacity: 1; transform: translateY(0); }
+                    80% { opacity: 1; transform: translateY(0); }
+                    100% { opacity: 0; transform: translateY(-10px); }
+                }
             </style>
         </head>
         <body>
             <div class="toolbar">
-                <div class="toolbar-group">
-                    <button class="action-button" id="statsBtn" title="Ver estatísticas">
-                        📊 Stats
-                <button class="action-button" id="statsBtn" title="Ver estatísticas">
-                    📊 Stats
-                    <span class="stats-badge" id="statsCount">0</span>
+                <button class="action-button icon" id="statsBtn" title="Ver estatísticas">
+                    📊 <span class="stats-badge" id="statsCount">0</span>
                 </button>
-                <div class="divider"></div>
-                <button class="action-button" id="undoBtn" title="Desfazer última alteração" disabled>
-                    ↩️ Desfazer
-                </button>
-                <button class="action-button warning" id="clearBtn" title="Limpar histórico">
-                    🗑️ Limpar
-                </button>
+                <div class="toolbar-actions">
+                    <button class="action-button icon" id="undoBtn" title="Desfazer última alteração" disabled>
+                        ↩️
+                    </button>
+                    <button class="action-button icon warning" id="clearBtn" title="Limpar histórico">
+                        🗑️
+                    </button>
+                </div>
             </div>
             
             <div id="chat">
@@ -555,7 +593,7 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                     rows="1"></textarea>
                 <button class="action-button primary" id="sendBtn">
                     <span class="loading" style="display: none;"></span>
-                    <span>Gerar Código</span>
+                    <span>Gerar</span>
                 </button>
             </div>
             
