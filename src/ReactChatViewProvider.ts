@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { ReactCodeGenerator } from './utils/codeGenerator';
 
 interface ChatMessage {
-    type: 'user' | 'assistant' | 'error' | 'code' | 'system';
+    type: 'user' | 'assistant' | 'error' | 'code' | 'system' | 'suggestion';
     text: string;
     timestamp: number;
     metadata?: {
@@ -10,6 +10,9 @@ interface ChatMessage {
         fileModified?: string;
         componentType?: string;
         action?: string;
+        currentFile?: string;
+        suggestions?: string[];
+        codeLanguage?: string;
     };
 }
 
@@ -18,17 +21,38 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     private codeGenerator: ReactCodeGenerator;
     private static readonly CHAT_HISTORY_KEY = 'reactChatHistory';
+    private currentFile?: string;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
         private readonly _context: vscode.ExtensionContext
     ) {
         this.codeGenerator = new ReactCodeGenerator();
+        this.setupFileChangeListener();
+    }
+
+    private setupFileChangeListener() {
+        vscode.window.onDidChangeActiveTextEditor(editor => {
+            if (editor) {
+                const fileName = editor.document.fileName;
+                if (fileName !== this.currentFile) {
+                    this.currentFile = fileName;
+                    this.addSystemMessage(`📁 Contexto alterado para: ${fileName.split('/').pop()}`);
+                }
+            }
+        });
     }
 
     private async saveMessage(message: ChatMessage) {
         const history = await this.getChatHistory();
-        history.push({ ...message, timestamp: Date.now() });
+        history.push({ 
+            ...message, 
+            timestamp: Date.now(),
+            metadata: {
+                ...message.metadata,
+                currentFile: this.currentFile
+            }
+        });
         await this._context.globalState.update(ReactChatViewProvider.CHAT_HISTORY_KEY, history);
     }
 
@@ -43,11 +67,58 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    private async addSystemMessage(text: string) {
-        await this.saveMessage({ type: 'system', text, timestamp: Date.now() });
+    private async addSystemMessage(text: string, suggestions?: string[]) {
+        await this.saveMessage({ 
+            type: 'system', 
+            text, 
+            timestamp: Date.now(),
+            metadata: { suggestions }
+        });
         if (this._view) {
-            this._view.webview.postMessage({ type: 'system', text });
+            this._view.webview.postMessage({ 
+                type: 'system', 
+                text,
+                metadata: { suggestions }
+            });
         }
+    }
+
+    private getSuggestionsForContext(): string[] {
+        const fileName = this.currentFile?.toLowerCase() || '';
+        
+        if (fileName.includes('component')) {
+            return [
+                "Adicione validação de props usando PropTypes",
+                "Converta para componente funcional com hooks",
+                "Adicione testes unitários para este componente",
+                "Otimize o performance com useMemo/useCallback"
+            ];
+        }
+        
+        if (fileName.includes('service')) {
+            return [
+                "Adicione tratamento de erros",
+                "Implemente cache de requisições",
+                "Adicione interceptors para refresh token",
+                "Crie tipos/interfaces para as respostas"
+            ];
+        }
+
+        if (fileName.includes('test')) {
+            return [
+                "Adicione casos de teste para erros",
+                "Crie mocks para as dependências",
+                "Adicione testes de integração",
+                "Teste casos de borda"
+            ];
+        }
+
+        return [
+            "Crie um novo componente React",
+            "Adicione um serviço de API",
+            "Crie um hook personalizado",
+            "Implemente um contexto global"
+        ];
     }
 
     public resolveWebviewView(
@@ -69,12 +140,13 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
             if (history.length > 0) {
                 webviewView.webview.postMessage({ type: 'loadHistory', history });
             } else {
-                this.addSystemMessage('👋 Bem-vindo ao React Chat! Aqui estão alguns exemplos do que você pode fazer:');
-                this.addSystemMessage('🔹 "Crie um componente de tabela de usuários com paginação e busca"');
-                this.addSystemMessage('🔹 "Edite o componente UserList para adicionar ordenação por coluna"');
-                this.addSystemMessage('🔹 "Crie um serviço de autenticação com JWT"');
-                this.addSystemMessage('🔹 "Adicione integração com a API REST https://api.exemplo.com/users"');
-                this.addSystemMessage('🔹 "Crie um formulário de cadastro com validação Yup"');
+                this.addSystemMessage('👋 Bem-vindo ao React Chat! Aqui estão alguns exemplos do que você pode fazer:', [
+                    'Crie um componente de tabela de usuários com paginação e busca',
+                    'Edite o componente UserList para adicionar ordenação por coluna',
+                    'Crie um serviço de autenticação com JWT',
+                    'Adicione integração com a API REST https://api.exemplo.com/users',
+                    'Crie um formulário de cadastro com validação Yup'
+                ]);
             }
         });
 
@@ -93,6 +165,9 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                     
                     const result = await this.codeGenerator.generateComponent(message.text);
                     
+                    // Detectar linguagem do código
+                    const codeLanguage = result.toLowerCase().includes('typescript') ? 'typescript' : 'javascript';
+                    
                     // Salvar resposta do assistente
                     await this.saveMessage({ 
                         type: 'assistant',
@@ -100,7 +175,9 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                         timestamp: Date.now(),
                         metadata: {
                             action: 'generate',
-                            componentType: 'react'
+                            componentType: 'react',
+                            codeLanguage,
+                            suggestions: this.getSuggestionsForContext()
                         }
                     });
                     
@@ -109,7 +186,9 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                         text: result,
                         metadata: {
                             action: 'generate',
-                            componentType: 'react'
+                            componentType: 'react',
+                            codeLanguage,
+                            suggestions: this.getSuggestionsForContext()
                         }
                     });
 
@@ -121,6 +200,12 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                 } else if (message.command === 'copyCode') {
                     await vscode.env.clipboard.writeText(message.code);
                     webviewView.webview.postMessage({ type: 'notification', text: 'Código copiado!' });
+                } else if (message.command === 'useSuggestion') {
+                    const suggestion = message.suggestion;
+                    webviewView.webview.postMessage({ 
+                        type: 'setInput', 
+                        text: suggestion 
+                    });
                 }
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -316,6 +401,35 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                     80% { opacity: 1; transform: translateY(0); }
                     100% { opacity: 0; transform: translateY(-20px); }
                 }
+                .suggestions {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 4px;
+                    margin-top: 8px;
+                }
+                .suggestion-chip {
+                    background-color: var(--vscode-badge-background);
+                    color: var(--vscode-badge-foreground);
+                    padding: 4px 8px;
+                    border-radius: 12px;
+                    font-size: 11px;
+                    cursor: pointer;
+                    border: 1px solid transparent;
+                    transition: all 0.2s;
+                }
+                .suggestion-chip:hover {
+                    background-color: var(--vscode-button-hoverBackground);
+                    border-color: var(--vscode-button-border);
+                }
+                .file-context {
+                    font-size: 11px;
+                    color: var(--vscode-descriptionForeground);
+                    margin-bottom: 4px;
+                    padding: 2px 6px;
+                    background-color: var(--vscode-badge-background);
+                    border-radius: 3px;
+                    display: inline-block;
+                }
                 .placeholder {
                     color: var(--vscode-input-placeholderForeground);
                     text-align: center;
@@ -389,9 +503,39 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                     return container;
                 }
 
+                function createSuggestions(suggestions) {
+                    if (!suggestions || !suggestions.length) return null;
+                    
+                    const container = document.createElement('div');
+                    container.className = 'suggestions';
+                    
+                    suggestions.forEach(suggestion => {
+                        const chip = document.createElement('span');
+                        chip.className = 'suggestion-chip';
+                        chip.textContent = suggestion;
+                        chip.onclick = () => {
+                            vscode.postMessage({
+                                command: 'useSuggestion',
+                                suggestion: suggestion
+                            });
+                        };
+                        container.appendChild(chip);
+                    });
+                    
+                    return container;
+                }
+
                 function appendMessage(message, type = 'user', timestamp = Date.now(), metadata = {}) {
                     const messageDiv = document.createElement('div');
                     messageDiv.className = 'message ' + type + '-message';
+                    
+                    // Adicionar contexto do arquivo se disponível
+                    if (metadata.currentFile) {
+                        const fileContext = document.createElement('div');
+                        fileContext.className = 'file-context';
+                        fileContext.textContent = '📁 ' + metadata.currentFile.split('/').pop();
+                        messageDiv.appendChild(fileContext);
+                    }
                     
                     const timeSpan = document.createElement('span');
                     timeSpan.className = 'message-timestamp';
@@ -413,7 +557,7 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                                 }
 
                                 const code = block.replace(/\`\`\`/g, '').trim();
-                                messageDiv.appendChild(createCodeBlock(code));
+                                messageDiv.appendChild(createCodeBlock(code, metadata.codeLanguage));
 
                                 remainingText = parts[1];
                             });
@@ -425,6 +569,14 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                             }
                         } else {
                             messageDiv.textContent = message;
+                        }
+
+                        // Adicionar sugestões se disponíveis
+                        if (metadata.suggestions) {
+                            const suggestionsElement = createSuggestions(metadata.suggestions);
+                            if (suggestionsElement) {
+                                messageDiv.appendChild(suggestionsElement);
+                            }
                         }
                     } else {
                         messageDiv.textContent = message;
@@ -487,7 +639,7 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                     } else if (message.type === 'error') {
                         appendMessage(message.text, 'error', Date.now());
                     } else if (message.type === 'system') {
-                        appendMessage(message.text, 'system', Date.now());
+                        appendMessage(message.text, 'system', Date.now(), message.metadata);
                     } else if (message.type === 'notification') {
                         showNotification(message.text);
                     } else if (message.type === 'loadHistory') {
@@ -499,6 +651,10 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                         chatDiv.innerHTML = '';
                         input.value = '';
                         input.style.height = 'auto';
+                    } else if (message.type === 'setInput') {
+                        input.value = message.text;
+                        input.focus();
+                        adjustTextareaHeight();
                     }
                 });
 
