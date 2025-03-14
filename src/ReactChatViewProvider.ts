@@ -194,11 +194,12 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
     ) {
         this._view = webviewView;
 
+        // Definir largura inicial adequada
         webviewView.webview.options = {
             enableScripts: true,
             localResourceRoots: [this._extensionUri]
         };
-
+        
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
         // Carregar histórico após inicializar o webview
@@ -306,18 +307,29 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                     font-family: var(--vscode-font-family);
                     color: var(--vscode-editor-foreground);
                     background-color: var(--vscode-editor-background);
-                    padding: 10px;
+                    margin: 0;
                     display: flex;
                     flex-direction: column;
                     height: 100vh;
-                    margin: 0;
+                    min-width: 300px;
+                    overflow: hidden;
+                }
+                .toolbar {
+                    display: flex;
+                    gap: 8px;
+                    padding: 8px;
+                    background-color: var(--vscode-editor-background);
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                    position: sticky;
+                    top: 0;
+                    z-index: 10;
                 }
                 #chat { 
                     flex: 1;
                     overflow-y: auto;
-                    margin-bottom: 10px;
-                    padding: 5px;
-                    scroll-behavior: smooth;
+                    padding: 5px 10px;
+                    margin: 0;
+                    height: calc(100vh - 140px);
                 }
                 #inputArea { 
                     display: flex;
@@ -325,6 +337,9 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                     padding: 10px;
                     background-color: var(--vscode-editor-background);
                     border-top: 1px solid var(--vscode-panel-border);
+                    position: sticky;
+                    bottom: 0;
+                    z-index: 10;
                 }
                 #userInput {
                     flex: 1;
@@ -508,14 +523,6 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                     font-style: italic;
                     font-size: 13px;
                 }
-                .toolbar {
-                    display: flex;
-                    gap: 8px;
-                    padding: 8px;
-                    background-color: var(--vscode-editor-background);
-                    border-bottom: 1px solid var(--vscode-panel-border);
-                }
-                
                 .stats-panel {
                     background-color: var(--vscode-editor-inactiveSelectionBackground);
                     border-radius: 6px;
