@@ -273,9 +273,9 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                         text: suggestion 
                     });
                 } else if (message.command === 'showStats') {
-                    vscode.postMessage({ command: 'showStats' });
+                    this._view?.webview.postMessage({ command: 'showStats' });
                 } else if (message.command === 'undo') {
-                    vscode.postMessage({ command: 'undo' });
+                    this._view?.webview.postMessage({ command: 'undo' });
                 }
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
