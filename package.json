@@ -1,0 +1,54 @@
+{
+    "name": "vscode-react-chat",
+    "displayName": "React Chat Plugin",
+    "description": "Extensão de chat para auxiliar na criação de códigos React dentro do seu projeto.",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.70.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onView:reactChatView"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "react-chat",
+                    "title": "React Chat",
+                    "icon": "$(comment-discussion)"
+                }
+            ]
+        },
+        "views": {
+            "react-chat": [
+                {
+                    "type": "webview",
+                    "id": "reactChatView",
+                    "name": "React Chat",
+                    "icon": "$(comment-discussion)",
+                    "contextualTitle": "React Chat"
+                }
+            ]
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "pretest": "npm run compile",
+        "test": "node ./test/runTest.js"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.25",
+        "@types/node-fetch": "^2.6.11",
+        "@types/vscode": "^1.70.0",
+        "typescript": "^5.4.2"
+    },
+    "dependencies": {
+        "node-fetch": "^2.7.0"
+    }
+}
