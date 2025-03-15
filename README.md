@@ -1,95 +1,64 @@
-# React Chat - Assistente de Desenvolvimento React
+# React Chat
 
-🚀 **Aumente sua produtividade no desenvolvimento React usando IA**
+Uma extensão do VS Code que fornece um assistente de desenvolvimento React com chat. O assistente pode ajudar você a criar componentes, serviços e outros arquivos React com base em suas solicitações em linguagem natural.
 
-Esta extensão do VSCode integra um assistente inteligente que ajuda você a criar, editar e manter componentes React de forma rápida e eficiente, usando comandos em linguagem natural.
+## Recursos
 
-## ✨ Funcionalidades
+- Criação de componentes React com TypeScript ou JavaScript
+- Suporte para diferentes tipos de componentes:
+  - Formulários com validação
+  - Tabelas com paginação, busca, filtros e ordenação
+  - Páginas de autenticação
+- Geração automática de:
+  - Arquivos de estilo (CSS Modules)
+  - Arquivos de tipos (TypeScript)
+  - Serviços e endpoints
+- Interface de chat intuitiva
+- Suporte para comandos em português
 
-- 🏗️ **Geração de Componentes**
-  - Crie componentes React completos com um simples comando
-  - Suporte a TypeScript e JavaScript
-  - Geração automática de tipos e interfaces
-  - Criação de estilos CSS/SCSS
+## Uso
 
-- 📝 **Edição Inteligente**
-  - Modifique componentes existentes
-  - Adicione novas features
-  - Refatore código automaticamente
-  - Mantenha consistência no código
+1. Abra a aba "React Chat" na barra lateral do VS Code
+2. Digite sua solicitação em português, por exemplo:
+   - "Criar um componente de tabela de usuários com paginação e busca"
+   - "Criar um formulário de cadastro de produtos"
+   - "Criar uma página de login"
+3. O assistente irá gerar os arquivos necessários com base na sua solicitação
 
-- 🔄 **Integrações**
-  - Crie serviços de API
-  - Implemente autenticação
-  - Adicione validações de formulário
-  - Integre bibliotecas populares
+## Exemplos de Comandos
 
-## 🚀 Como Usar
+- `criar componente de tabela de usuários com paginação e busca`
+- `criar formulário de cadastro de produtos com validação`
+- `criar página de login com autenticação`
+- `criar componente de lista de pedidos com filtros e ordenação`
 
-1. Instale a extensão
-2. Configure sua API Key da OpenAI:
-   ```bash
-   # No terminal do VSCode
-   export OPENAI_API_KEY=sua-api-key
-   ```
-3. Abra a aba "React Chat" na barra lateral do VSCode (ícone 💬)
-4. Digite seus comandos em linguagem natural
+## Requisitos
 
-### 📝 Exemplos de Comandos
+- VS Code 1.85.0 ou superior
+- Node.js e npm instalados
+- Projeto React existente (TypeScript ou JavaScript)
 
-\`\`\`
-"Crie uma tabela de usuários com paginação e busca"
-"Adicione ordenação por coluna no componente UserList"
-"Crie um formulário de cadastro com validação Yup"
-"Implemente um serviço de autenticação com JWT"
-"Adicione integração com a API REST https://api.exemplo.com/users"
-\`\`\`
+## Instalação
 
-## 💡 Recursos Avançados
+1. Abra o VS Code
+2. Vá para a aba de extensões (Ctrl+Shift+X)
+3. Pesquise por "React Chat"
+4. Clique em "Instalar"
 
-- **Persistência de Histórico**: Mantenha o contexto das suas conversas
-- **Formatação de Código**: Código gerado formatado e pronto para uso
-- **Copiar & Colar**: Botão de cópia rápida para cada bloco de código
-- **Feedback Visual**: Indicadores de loading e notificações
-- **Temas**: Interface integrada com seu tema do VSCode
+## Configuração
 
-## 🛠️ Tecnologias Suportadas
+A extensão detecta automaticamente se seu projeto usa TypeScript ou JavaScript e gera os arquivos no formato apropriado.
 
-- ⚛️ React (16+, 17+, 18+)
-- 📘 TypeScript
-- 🎨 CSS/SCSS Modules
-- 📦 Principais bibliotecas:
-  - React Router
-  - Redux/Context API
-  - Formik/React Hook Form
-  - Styled Components
-  - Material UI/Chakra UI
-  - E muito mais!
+## Contribuição
 
-## ⚙️ Configurações
+Contribuições são bem-vindas! Por favor, siga estas etapas:
 
-A extensão se adapta automaticamente ao seu ambiente React. Suporta:
-- Create React App
-- Next.js
-- Vite
-- Gatsby
-- E outros frameworks React
+1. Fork o repositório
+2. Crie uma branch para sua feature (`git checkout -b feature/MinhaFeature`)
+3. Faça commit das suas mudanças (`git commit -am 'Adiciona nova feature'`)
+4. Push para a branch (`git push origin feature/MinhaFeature`)
+5. Crie um Pull Request
 
-## 📚 Dicas de Uso
+## Licença
 
-1. **Seja Específico**: Quanto mais detalhado seu comando, melhor o resultado
-2. **Use o Histórico**: Mantenha contexto entre as conversas
-3. **Iteração**: Refine os componentes com comandos subsequentes
-4. **Reutilização**: Use o botão de cópia para reutilizar código
-5. **Documentação**: Peça para adicionar comentários e documentação
-
-## 🤝 Contribuindo
-
-Contribuições são bem-vindas! Sinta-se à vontade para:
-- Reportar bugs
-- Sugerir novas features
-- Enviar pull requests
-
-## 📄 Licença
-
-MIT - Sinta-se livre para usar em seus projetos! 
+MIT 
