@@ -1,4 +1,5 @@
-export const tableStyles = `.container {
+export const tableStyles = `
+.container {
     padding: 1rem;
     background: var(--vscode-editor-background);
     border: 1px solid var(--vscode-input-border);
@@ -137,4 +138,5 @@ export const tableStyles = `.container {
     opacity: 0.5;
     cursor: not-allowed;
     border-color: var(--vscode-input-border);
-} 
+}
+` 

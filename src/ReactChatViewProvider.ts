@@ -3,11 +3,13 @@ import { ReactCodeGenerator } from './utils/codeGenerator';
 import { baseStyles, buttonStyles, inputStyles, messageStyles } from './design-system';
 import { colors } from './design-system/tokens/colors';
 import { spacing } from './design-system/tokens/spacing';
+import * as path from 'path';
+import * as fs from 'fs';
+import { TemplateUtils } from './utils/templateUtils';
 
 interface ChatStats {
-    filesCreated: number;
-    filesModified: number;
-    componentsGenerated: number;
+    totalMessages: number;
+    commandsExecuted: number;
     lastModified: string[];
 }
 
@@ -31,25 +33,27 @@ interface ChatMessage {
 
 export class ReactChatViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'reactChatView';
-    private _view?: vscode.WebviewView;
+    private _webview?: vscode.WebviewView;
     private codeGenerator: ReactCodeGenerator;
     private static readonly CHAT_HISTORY_KEY = 'reactChatHistory';
     private static readonly CHAT_STATS_KEY = 'reactChatStats';
     private currentFile?: string;
     private stats: ChatStats = {
-        filesCreated: 0,
-        filesModified: 0,
-        componentsGenerated: 0,
+        totalMessages: 0,
+        commandsExecuted: 0,
         lastModified: []
     };
+    private workspaceRoot: string;
+    private messages: ChatMessage[] = [];
 
     constructor(
-        private readonly _extensionUri: vscode.Uri,
-        private readonly _context: vscode.ExtensionContext
+        private readonly _context: vscode.ExtensionContext,
+        private readonly _extensionUri: vscode.Uri
     ) {
-        this.codeGenerator = new ReactCodeGenerator();
         this.setupFileChangeListener();
         this.loadStats();
+        this.workspaceRoot = _context.workspaceState.get<string>('workspaceRoot') || '';
+        this.codeGenerator = new ReactCodeGenerator();
     }
 
     private async loadStats() {
@@ -61,22 +65,28 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
 
     private async updateStats(action: 'create' | 'modify', fileName: string) {
         if (action === 'create') {
-            this.stats.filesCreated++;
+            this.stats.totalMessages++;
+            this.stats.commandsExecuted++;
+            this.stats.lastModified = [fileName, ...this.stats.lastModified.slice(0, 4)];
+            
+            await this._context.globalState.update(ReactChatViewProvider.CHAT_STATS_KEY, this.stats);
+            
+            // Enviar atualização para o webview
+            this.sendStatsUpdate();
         } else {
-            this.stats.filesModified++;
+            this.stats.totalMessages++;
+            this.stats.commandsExecuted++;
+            this.stats.lastModified = [fileName, ...this.stats.lastModified.slice(0, 4)];
+            
+            await this._context.globalState.update(ReactChatViewProvider.CHAT_STATS_KEY, this.stats);
+            
+            // Enviar atualização para o webview
+            this.sendStatsUpdate();
         }
-        
-        // Manter apenas os últimos 5 arquivos modificados
-        this.stats.lastModified = [fileName, ...this.stats.lastModified.slice(0, 4)];
-        
-        await this._context.globalState.update(ReactChatViewProvider.CHAT_STATS_KEY, this.stats);
-        
-        // Enviar atualização para o webview
-        this.sendStatsUpdate();
     }
 
     private async sendStatsUpdate() {
-        if (this._view) {
+        if (this._webview) {
             const statsMessage = this.formatStats();
             await this.saveMessage({
                 type: 'stats',
@@ -85,19 +95,18 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                 metadata: { stats: this.stats }
             });
             
-            this._view.webview.postMessage({
+            this._webview.webview.postMessage({
                 type: 'statsUpdate',
                 stats: this.stats,
-                text: statsMessage
+                formattedStats: statsMessage
             });
         }
     }
 
     private formatStats(): string {
         return `📊 Estatísticas do Projeto:
-• Arquivos Criados: ${this.stats.filesCreated}
-• Arquivos Modificados: ${this.stats.filesModified}
-• Componentes Gerados: ${this.stats.componentsGenerated}
+• Mensagens Recebidas: ${this.stats.totalMessages}
+• Comandos Executados: ${this.stats.commandsExecuted}
 ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + this.stats.lastModified.map(f => `• ${f}`).join('\n') : ''}`;
     }
 
@@ -126,8 +135,8 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
             }
             
             // Enviar mensagem para o webview
-            if (this._view) {
-                this._view.webview.postMessage({ type: 'newMessage', message });
+            if (this._webview) {
+                this._webview.webview.postMessage({ type: 'newMessage', message });
             }
         } catch (error) {
             console.error('Erro ao salvar mensagem:', error);
@@ -152,8 +161,8 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
             await this._context.globalState.update(ReactChatViewProvider.CHAT_HISTORY_KEY, []);
             await this._context.globalState.update(ReactChatViewProvider.CHAT_STATS_KEY, undefined);
             
-            if (this._view) {
-                this._view.webview.postMessage({ type: 'clearHistory' });
+            if (this._webview) {
+                this._webview.webview.postMessage({ type: 'clearHistory' });
                 this.addSystemMessage('Histórico limpo com sucesso! 🧹');
             }
         } catch (error) {
@@ -169,8 +178,8 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
             timestamp: Date.now(),
             metadata: { suggestions }
         });
-        if (this._view) {
-            this._view.webview.postMessage({ 
+        if (this._webview) {
+            this._webview.webview.postMessage({ 
                 type: 'system', 
                 text,
                 metadata: { suggestions }
@@ -219,8 +228,8 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
     public async generateResponse(request: string): Promise<void> {
         try {
             // Atualizar UI para mostrar que está processando
-            this._view?.webview.postMessage({ type: 'loading', show: true });
-            this._view?.webview.postMessage({ type: 'thinking', text: 'Analisando sua solicitação...', metadata: { stage: 'analyzing' } });
+            this._webview?.webview.postMessage({ type: 'loading', show: true });
+            this._webview?.webview.postMessage({ type: 'thinking', text: 'Analisando sua solicitação...', metadata: { stage: 'analyzing' } });
 
             // Adicionar mensagem do usuário
             await this.saveMessage({ 
@@ -237,7 +246,7 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
             ];
 
             for (const { stage, text } of stages) {
-                this._view?.webview.postMessage({ type: 'thinking', text, metadata: { stage } });
+                this._webview?.webview.postMessage({ type: 'thinking', text, metadata: { stage } });
                 await this.saveMessage({
                     type: 'thinking',
                     text,
@@ -273,7 +282,7 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
             });
 
             // Atualizar UI
-            this._view?.webview.postMessage({
+            this._webview?.webview.postMessage({
                 type: 'response',
                 text: result,
                 metadata: {
@@ -287,7 +296,7 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
 
         } catch (error) {
             console.error('Erro ao gerar resposta:', error);
-            this._view?.webview.postMessage({ type: 'error', text: `Erro ao processar sua solicitação: ${error instanceof Error ? error.message : 'Erro desconhecido'}` });
+            this._webview?.webview.postMessage({ type: 'error', text: `Erro ao processar sua solicitação: ${error instanceof Error ? error.message : 'Erro desconhecido'}` });
             await this.saveMessage({
                 type: 'error',
                 text: `Erro ao processar sua solicitação: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
@@ -295,63 +304,32 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
             });
         } finally {
             // Esconder indicador de loading
-            this._view?.webview.postMessage({ type: 'loading', show: false });
+            this._webview?.webview.postMessage({ type: 'loading', show: false });
         }
     }
 
-    public resolveWebviewView(
-        webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
-        _token: vscode.CancellationToken,
-    ) {
-        this._view = webviewView;
-
+    public resolveWebviewView(webviewView: vscode.WebviewView): void {
+        this._webview = webviewView;
         webviewView.webview.options = {
             enableScripts: true,
             localResourceRoots: [this._extensionUri]
         };
-        
-        webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+        webviewView.webview.html = this.getHtmlForWebview();
 
-        // Carregar histórico após o webview estar pronto
+        // Configurar manipulador de mensagens
         webviewView.webview.onDidReceiveMessage(async (message) => {
-            if (message.command === 'webviewReady') {
-                const history = await this.getChatHistory();
-                if (history && history.length > 0) {
-                    console.log('Carregando histórico:', history.length, 'mensagens');
-                    webviewView.webview.postMessage({ type: 'loadHistory', history });
-                } else {
-                    console.log('Nenhum histórico encontrado, mostrando mensagem inicial');
-                    this.addSystemMessage('👋 Bem-vindo ao React Chat! Aqui estão alguns exemplos do que você pode fazer:', [
-                        'Crie um componente de tabela de usuários com paginação e busca',
-                        'Edite o componente UserList para adicionar ordenação por coluna',
-                        'Crie um serviço de autenticação com JWT',
-                        'Adicione integração com a API REST https://api.exemplo.com/users',
-                        'Crie um formulário de cadastro com validação Yup'
-                    ]);
-                }
-            } else if (message.command === 'generate') {
-                await this.generateResponse(message.text);
-            } else if (message.command === 'clearHistory') {
-                await this.clearHistory();
-            } else if (message.command === 'copyCode') {
-                await vscode.env.clipboard.writeText(message.code);
-                webviewView.webview.postMessage({ type: 'notification', text: 'Código copiado!' });
-            } else if (message.command === 'useSuggestion') {
-                const suggestion = message.suggestion;
-                webviewView.webview.postMessage({ 
-                    type: 'setInput', 
-                    text: suggestion 
-                });
-            } else if (message.command === 'showStats') {
-                this._view?.webview.postMessage({ command: 'showStats' });
-            } else if (message.command === 'undo') {
-                this._view?.webview.postMessage({ command: 'undo' });
+            switch (message.type) {
+                case 'input':
+                    await this.handleInput(message.text);
+                    break;
+                case 'clearHistory':
+                    await this.clearHistory();
+                    break;
             }
         });
     }
 
-    private _getHtmlForWebview(webview: vscode.Webview): string {
+    private getHtmlForWebview(): string {
         const html: string = `<!DOCTYPE html>
         <html lang="pt-BR">
         <head>
@@ -958,4 +936,150 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
         </html>`;
         return html;
     }
+
+    private updateWebview(): void {
+        if (this._webview) {
+            this._webview.webview.postMessage({ type: 'updateView', messages: this.messages });
+        }
+    }
+
+    private async handleInput(input: string): Promise<void> {
+        // Adicionar a mensagem do usuário ao histórico
+        this.messages.push({
+            type: 'user',
+            text: input,
+            timestamp: Date.now()
+        });
+
+        // Atualizar a visualização
+        this.updateWebview();
+
+        // Processar a mensagem
+        await this.handleMessage(input);
+
+        // Atualizar as estatísticas
+        this.updateStats('create', input);
+    }
+
+    private async handleMessage(message: string): Promise<void> {
+        try {
+            // Adicionar mensagem de "pensando"
+            this.messages.push({
+                type: 'thinking',
+                text: 'Processando...',
+                timestamp: Date.now()
+            });
+            this.updateWebview();
+
+            // Verificar se a mensagem é um comando
+            if (message.toLowerCase().startsWith('criar') || message.toLowerCase().startsWith('crie')) {
+                await this.handleCommand(message);
+                return;
+            }
+
+            // Outras ações podem ser adicionadas aqui
+            this.messages.push({
+                type: 'error',
+                text: 'Não entendi o que você quer fazer. Por favor, use comandos como "criar componente".',
+                timestamp: Date.now()
+            });
+            this.updateWebview();
+        } catch (err) {
+            const error = err as Error;
+            console.error('Erro ao processar mensagem:', error);
+            this.messages.push({
+                type: 'error',
+                text: `Erro ao processar mensagem: ${error.message}`,
+                timestamp: Date.now()
+            });
+            this.updateWebview();
+        }
+    }
+
+    private async handleCommand(command: string): Promise<void> {
+        const createComponentRegex = /^criar? (um )?componente/i;
+        
+        if (createComponentRegex.test(command)) {
+            await this.handleCreateComponent(command);
+            return;
+        }
+
+        // Outros comandos podem ser adicionados aqui
+        this.messages.push({
+            type: 'error',
+            text: 'Comando não reconhecido',
+            timestamp: Date.now()
+        });
+        this.updateWebview();
+    }
+
+    private async handleCreateComponent(request: string): Promise<void> {
+        try {
+            const isTypeScript = await this.isTypeScriptProject();
+            const template = TemplateUtils.generateComponent(request, isTypeScript);
+            const componentDir = path.join(this.workspaceRoot, 'src', 'components', template.name);
+            
+            await fs.promises.mkdir(componentDir, { recursive: true });
+
+            const files = [
+                {
+                    path: path.join(componentDir, `${template.name}.${isTypeScript ? 'tsx' : 'jsx'}`),
+                    content: template.component
+                },
+                {
+                    path: path.join(componentDir, `${template.name}.module.css`),
+                    content: template.styles
+                }
+            ];
+
+            if (template.types && isTypeScript) {
+                files.push({
+                    path: path.join(componentDir, `${template.name}.types.ts`),
+                    content: template.types
+                });
+            }
+
+            await Promise.all(files.map(file => fs.promises.writeFile(file.path, file.content)));
+
+            this.messages.push({
+                type: 'system',
+                text: `Componente ${template.name} criado com sucesso!`,
+                timestamp: Date.now(),
+                metadata: {
+                    componentType: template.name,
+                    action: 'create',
+                    fileCreated: files.map(f => f.path).join(', ')
+                }
+            });
+            this.updateWebview();
+        } catch (err) {
+            const error = err as Error;
+            console.error('Erro ao criar componente:', error);
+            this.messages.push({
+                type: 'error',
+                text: `Erro ao criar componente: ${error.message}`,
+                timestamp: Date.now()
+            });
+            this.updateWebview();
+        }
+    }
+
+    private async isTypeScriptProject(): Promise<boolean> {
+        try {
+            const tsConfigPath = path.join(this.workspaceRoot, 'tsconfig.json');
+            await fs.promises.access(tsConfigPath);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    private showMessage(message: string): void {
+        vscode.window.showInformationMessage(message);
+    }
+
+    private showError(message: string): void {
+        vscode.window.showErrorMessage(message);
+    }
+
 }

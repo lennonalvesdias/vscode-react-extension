@@ -1,22 +1,36 @@
 import * as vscode from 'vscode';
-import { Configuration, OpenAIApi } from 'openai';
-import { TemplateConfig, Feature } from '../templates/types';
+import OpenAI from 'openai';
+
+interface AIResponse {
+    action: 'create' | 'edit' | 'delete';
+    componentType: string;
+    newName: string;
+    oldName?: string;
+    features: Array<{
+        type: string;
+        fields?: Array<{ name: string; type: string; validation?: string[] }>;
+        service?: {
+            baseURL: string;
+            endpoints: Array<{ method: string; path: string }>;
+            auth: boolean;
+        };
+    }>;
+}
 
 export class AIHelper {
-    private openai: OpenAIApi;
+    private openai!: OpenAI;
     private apiKey: string | undefined;
 
     constructor() {
         this.apiKey = process.env.OPENAI_API_KEY;
         if (this.apiKey) {
-            const configuration = new Configuration({
+            this.openai = new OpenAI({
                 apiKey: this.apiKey
             });
-            this.openai = new OpenAIApi(configuration);
         }
     }
 
-    public async parseRequest(request: string): Promise<any> {
+    public async parseRequest(request: string): Promise<AIResponse> {
         if (!this.apiKey) {
             const input = await vscode.window.showInputBox({
                 prompt: 'Por favor, insira sua chave da API OpenAI',
@@ -28,14 +42,13 @@ export class AIHelper {
             }
 
             this.apiKey = input;
-            const configuration = new Configuration({
+            this.openai = new OpenAI({
                 apiKey: this.apiKey
             });
-            this.openai = new OpenAIApi(configuration);
         }
 
         try {
-            const response = await this.openai.createChatCompletion({
+            const response = await this.openai.chat.completions.create({
                 model: 'gpt-4',
                 messages: [
                     {
@@ -114,7 +127,7 @@ Exemplos de interpretação:
                 ]
             });
 
-            const result = response.data.choices[0]?.message?.content;
+            const result = response.choices[0]?.message?.content;
             if (!result) {
                 throw new Error('Resposta vazia da API');
             }
