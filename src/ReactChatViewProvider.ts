@@ -1,8 +1,5 @@
 import * as vscode from 'vscode';
 import { ReactCodeGenerator } from './utils/codeGenerator';
-import { baseStyles, buttonStyles, inputStyles, messageStyles } from './design-system';
-import { colors } from './design-system/tokens/colors';
-import { spacing } from './design-system/tokens/spacing';
 import * as path from 'path';
 import * as fs from 'fs';
 import { TemplateUtils } from './utils/templateUtils';
