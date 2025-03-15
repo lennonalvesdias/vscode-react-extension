@@ -2,31 +2,35 @@ export const colors = {
     // Backgrounds
     background: '#1e1e1e',
     backgroundLight: '#252526',
+    backgroundDark: '#1a1a1a',
     backgroundInactive: '#2d2d2d',
+    backgroundHover: '#2a2a2a',
     
     // Text
     text: '#cccccc',
-    textSecondary: '#9d9d9d',
-    textPlaceholder: '#6b6b6b',
-    textLight: '#8a8a8a',
+    textSecondary: '#8c8c8c',
+    textPlaceholder: '#6c6c6c',
+    textLight: '#ffffff',
     
     // Borders
     border: '#3d3d3d',
     borderFocus: '#007acc',
     
-    // Actions
-    primary: '#0e639c',
-    primaryHover: 'var(--vscode-button-hoverBackground)',
-    secondary: '#3794ff',
-    secondaryHover: 'var(--vscode-button-secondaryHoverBackground)',
-    error: '#f14c4c',
-    warning: '#cca700',
+    // Primary Colors
+    primary: '#0078d4',
+    primaryDark: '#0066b5',
+    primaryAlpha: 'rgba(0, 120, 212, 0.2)',
     
-    // Badges & Chips
-    badge: '#4d4d4d',
-    badgeText: '#ffffff',
+    // Status Colors
+    error: '#f44336',
+    warning: '#ff9800',
+    success: '#4caf50',
     
     // Notifications
-    notification: '#1b80b2',
-    notificationText: '#ffffff'
+    notification: '#252526',
+    notificationText: '#cccccc',
+    
+    // Badges
+    badge: '#4d4d4d',
+    badgeText: '#cccccc'
 }; 

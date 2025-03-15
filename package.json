@@ -15,21 +15,21 @@
     "main": "./out/extension.js",
     "contributes": {
         "viewsContainers": {
-            "activitybar": [
+            "panel": [
                 {
                     "id": "react-chat",
                     "title": "React Chat",
-                    "icon": "$(comment-discussion)"
+                    "icon": "$(copilot)"
                 }
             ]
         },
         "views": {
-            "react-chat": [
+            "panel": [
                 {
                     "type": "webview",
                     "id": "reactChatView",
                     "name": "React Chat",
-                    "icon": "$(comment-discussion)",
+                    "icon": "$(copilot)",
                     "contextualTitle": "React Chat"
                 }
             ]
