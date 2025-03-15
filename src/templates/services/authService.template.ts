@@ -1,105 +1,40 @@
-export const authServiceTemplate = {
-    typescript: `
-import axios, { AxiosInstance } from 'axios';
-
-interface LoginCredentials {
+export const authServiceTemplate = `{{#if isTypeScript}}
+interface LoginData {
     email: string;
     password: string;
 }
+{{/if}}
 
-interface AuthResponse {
-    token: string;
-    user: {
-        id: number;
-        email: string;
-        name: string;
-    };
-}
+export class AuthService {
+    private static API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
-class AuthService {
-    private api: AxiosInstance;
-
-    constructor() {
-        this.api = axios.create({
-            baseURL: process.env.REACT_APP_API_URL || '/api',
+    public static async login(data{{#if isTypeScript}}: LoginData{{/if}}) {
+        const response = await fetch(\`\${this.API_URL}/auth/login\`, {
+            method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
-            }
+            },
+            body: JSON.stringify(data)
         });
-    }
 
-    async login(credentials: LoginCredentials): Promise<AuthResponse> {
-        try {
-            const { data } = await this.api.post<AuthResponse>('/auth/login', credentials);
-            this.setToken(data.token);
-            return data;
-        } catch (error) {
+        if (!response.ok) {
             throw new Error('Falha na autenticação');
         }
+
+        const result = await response.json();
+        localStorage.setItem('token', result.token);
+        return result;
     }
 
-    private setToken(token: string): void {
-        localStorage.setItem('token', token);
-        this.api.defaults.headers.common['Authorization'] = \`Bearer \${token}\`;
+    public static logout() {
+        localStorage.removeItem('token');
     }
 
-    getToken(): string | null {
+    public static getToken() {
         return localStorage.getItem('token');
     }
 
-    logout(): void {
-        localStorage.removeItem('token');
-        delete this.api.defaults.headers.common['Authorization'];
-    }
-
-    isAuthenticated(): boolean {
+    public static isAuthenticated() {
         return !!this.getToken();
     }
-}
-
-export default new AuthService();`,
-
-    javascript: `
-import axios from 'axios';
-
-class AuthService {
-    constructor() {
-        this.api = axios.create({
-            baseURL: process.env.REACT_APP_API_URL || '/api',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-    }
-
-    async login(credentials) {
-        try {
-            const { data } = await this.api.post('/auth/login', credentials);
-            this.setToken(data.token);
-            return data;
-        } catch (error) {
-            throw new Error('Falha na autenticação');
-        }
-    }
-
-    setToken(token) {
-        localStorage.setItem('token', token);
-        this.api.defaults.headers.common['Authorization'] = \`Bearer \${token}\`;
-    }
-
-    getToken() {
-        return localStorage.getItem('token');
-    }
-
-    logout() {
-        localStorage.removeItem('token');
-        delete this.api.defaults.headers.common['Authorization'];
-    }
-
-    isAuthenticated() {
-        return !!this.getToken();
-    }
-}
-
-export default new AuthService();`
-}; 
+}`; 

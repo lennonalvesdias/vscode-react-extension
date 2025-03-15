@@ -1,15 +1,22 @@
 export interface TemplateConfig {
     name: string;
     type: 'auth' | 'table' | 'form';
+    features: string[];
     isTypeScript: boolean;
-    features?: Feature[];
+}
+
+export interface AIResponse {
+    action: 'create' | 'edit' | 'delete';
+    oldName?: string;
+    newName: string;
+    componentType: 'auth' | 'table' | 'form' | 'page';
+    features: string[];
 }
 
 export interface Feature {
-    type: 'auth' | 'table' | 'form' | 'pagination' | 'filters' | 'search' | 'sorting';
-    fields?: Field[];
-    services?: ServiceConfig[];
-    routes?: RouteConfig[];
+    name: string;
+    description: string;
+    code: string;
 }
 
 export interface Field {

@@ -3,16 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { AIHelper } from './aiHelper';
 import { TemplateUtils } from './templateUtils';
-import { TemplateConfig, Feature, TemplateResult } from '../templates/types';
-
-interface ComponentConfig {
-    name: string;
-    type: 'page' | 'component';
-    features: {
-        type: string;
-        fields?: { name: string; type: string; }[];
-    }[];
-}
+import { TemplateConfig, AIResponse } from '../templates/types';
 
 export class ReactCodeGenerator {
     private workspaceRoot: string;
@@ -43,27 +34,22 @@ export class ReactCodeGenerator {
         }
     }
 
-    private async createComponent(response: any): Promise<string> {
+    private async createComponent(response: AIResponse): Promise<string> {
         try {
-            // Configurar o template
             const config: TemplateConfig = {
-                name: response.newName || TemplateUtils.inferComponentName(response.toString()),
-                type: response.componentType || TemplateUtils.inferComponentType(response.toString()),
-                features: response.features || TemplateUtils.inferFeatures(response.toString(), response.componentType),
+                name: response.newName,
+                type: response.componentType === 'page' ? 'auth' : response.componentType as 'auth' | 'table' | 'form',
+                features: response.features,
                 isTypeScript: this.isTypeScript
             };
 
-            // Obter os templates necessários
             const template = TemplateUtils.getTemplate(config);
-
-            // Criar diretórios necessários
-            const baseDir = path.join(this.workspaceRoot, 'src', config.type === 'page' ? 'pages' : 'components');
+            const baseDir = path.join(this.workspaceRoot, 'src', response.componentType === 'page' ? 'pages' : 'components');
             await fs.promises.mkdir(baseDir, { recursive: true });
 
             const componentDir = path.join(baseDir, config.name);
             await fs.promises.mkdir(componentDir, { recursive: true });
 
-            // Gerar arquivos
             const files = [
                 {
                     path: path.join(componentDir, `${config.name}.${this.isTypeScript ? 'tsx' : 'jsx'}`),
@@ -75,7 +61,6 @@ export class ReactCodeGenerator {
                 }
             ];
 
-            // Se houver serviço, criar diretório e arquivo
             if (template.service) {
                 const servicesDir = path.join(this.workspaceRoot, 'src', 'services');
                 await fs.promises.mkdir(servicesDir, { recursive: true });
@@ -86,7 +71,6 @@ export class ReactCodeGenerator {
                 });
             }
 
-            // Escrever todos os arquivos
             await Promise.all(files.map(file => 
                 fs.promises.writeFile(file.path, file.content)
             ));
@@ -98,7 +82,7 @@ export class ReactCodeGenerator {
         }
     }
 
-    private async editComponent(response: any): Promise<string> {
+    private async editComponent(response: AIResponse): Promise<string> {
         const oldPath = this.findComponentPath(response.oldName);
         if (!oldPath) {
             throw new Error(`Componente ${response.oldName} não encontrado`);
@@ -106,7 +90,7 @@ export class ReactCodeGenerator {
 
         const config: TemplateConfig = {
             name: response.newName,
-            type: response.componentType,
+            type: response.componentType === 'page' ? 'auth' : response.componentType as 'auth' | 'table' | 'form',
             features: response.features,
             isTypeScript: this.isTypeScript
         };
@@ -115,19 +99,16 @@ export class ReactCodeGenerator {
         const newDir = path.join(
             this.workspaceRoot, 
             'src', 
-            config.type === 'page' ? 'pages' : 'components',
+            response.componentType === 'page' ? 'pages' : 'components',
             config.name
         );
 
-        // Remover diretório antigo
         if (fs.existsSync(oldPath)) {
             fs.rmSync(oldPath, { recursive: true });
         }
 
-        // Criar novo diretório
         await fs.promises.mkdir(newDir, { recursive: true });
 
-        // Gerar novos arquivos
         const files = [
             {
                 path: path.join(newDir, `${config.name}.${this.isTypeScript ? 'tsx' : 'jsx'}`),
@@ -146,7 +127,7 @@ export class ReactCodeGenerator {
         return `Componente ${response.oldName} atualizado para ${config.name} com sucesso!`;
     }
 
-    private async deleteComponent(response: any): Promise<string> {
+    private async deleteComponent(response: AIResponse): Promise<string> {
         const componentPath = this.findComponentPath(response.oldName);
         if (!componentPath) {
             throw new Error(`Componente ${response.oldName} não encontrado`);
@@ -156,7 +137,9 @@ export class ReactCodeGenerator {
         return `Componente ${response.oldName} removido com sucesso!`;
     }
 
-    private findComponentPath(name: string): string | null {
+    private findComponentPath(name: string | undefined): string | null {
+        if (!name) return null;
+        
         const possiblePaths = [
             path.join(this.workspaceRoot, 'src', 'components', name),
             path.join(this.workspaceRoot, 'src', 'pages', name)

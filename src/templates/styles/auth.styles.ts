@@ -7,13 +7,15 @@ export const authStyles = `.container {
 }
 
 .form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 2rem;
+    background-color: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
     width: 100%;
     max-width: 400px;
-    padding: 2rem;
-    background: var(--vscode-editor-background);
-    border: 1px solid var(--vscode-input-border);
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .form h1 {
@@ -32,17 +34,15 @@ export const authStyles = `.container {
     color: var(--vscode-editor-foreground);
 }
 
-.formGroup input {
-    width: 100%;
-    padding: 0.75rem;
+.input {
+    padding: 0.5rem;
     border: 1px solid var(--vscode-input-border);
     border-radius: 4px;
-    background: var(--vscode-input-background);
+    background-color: var(--vscode-input-background);
     color: var(--vscode-input-foreground);
-    font-size: 1rem;
 }
 
-.formGroup input:focus {
+.input:focus {
     outline: none;
     border-color: var(--vscode-focusBorder);
 }
@@ -88,6 +88,20 @@ export const authStyles = `.container {
 .togglePassword:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.button {
+    padding: 0.5rem 1rem;
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.button:hover {
+    background-color: var(--vscode-button-hoverBackground);
 }
 
 .submitButton {

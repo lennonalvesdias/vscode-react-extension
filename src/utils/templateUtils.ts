@@ -1,12 +1,11 @@
-import { TemplateConfig, Feature, Field, ComponentTemplate, ServiceConfig } from '../templates/types';
-import { loginPageTemplate } from '../templates/pages/LoginPage.template';
-import { authServiceTemplate } from '../templates/services/authService.template';
-import { authStyles } from '../templates/styles/auth.styles';
-import { tableTemplate } from '../templates/components/Table.template';
-import { tableStyles } from '../templates/styles/table.styles';
-import { formTemplate } from '../templates/components/Form.template';
-import { formStyles } from '../templates/styles/form.styles';
-import Handlebars from 'handlebars';
+import { TemplateConfig } from '../templates/types';
+import * as Handlebars from 'handlebars';
+
+interface Template {
+    component: string;
+    styles: string;
+    service?: string;
+}
 
 export class TemplateUtils {
     private static commonFields: { [key: string]: { type: string; validation: string[] } } = {
@@ -250,70 +249,436 @@ export class TemplateUtils {
         return fields;
     }
 
-    public static getTemplate(config: TemplateConfig): ComponentTemplate {
+    public static getTemplate(config: TemplateConfig): Template {
+        const template = this.getBaseTemplate(config);
+        return {
+            component: this.compileTemplate(template.component, config),
+            styles: this.compileTemplate(template.styles, config),
+            service: template.service ? this.compileTemplate(template.service, config) : undefined
+        };
+    }
+
+    private static getBaseTemplate(config: TemplateConfig): Template {
         switch (config.type) {
             case 'auth':
-                return this.loadAuthTemplate(config);
+                return {
+                    component: this.getAuthComponentTemplate(),
+                    styles: this.getAuthStylesTemplate(),
+                    service: this.getAuthServiceTemplate()
+                };
             case 'table':
-                return this.loadTableTemplate(config);
+                return {
+                    component: this.getTableComponentTemplate(),
+                    styles: this.getTableStylesTemplate()
+                };
             case 'form':
-                return this.loadFormTemplate(config);
+                return {
+                    component: this.getFormComponentTemplate(),
+                    styles: this.getFormStylesTemplate()
+                };
             default:
-                throw new Error(`Template type '${config.type}' not supported`);
+                throw new Error(`Tipo de template não suportado: ${config.type}`);
         }
     }
 
-    private static loadAuthTemplate(config: TemplateConfig): ComponentTemplate {
-        const template = config.isTypeScript ? loginPageTemplate.typescript : loginPageTemplate.javascript;
-        const compiledTemplate = Handlebars.compile(template)({
-            name: config.name
-        });
-
-        return {
-            name: config.name,
-            component: compiledTemplate,
-            styles: authStyles,
-            types: ''
-        };
+    private static compileTemplate(template: string, data: TemplateConfig): string {
+        const compiledTemplate = Handlebars.compile(template);
+        return compiledTemplate(data);
     }
 
-    private static loadTableTemplate(config: TemplateConfig): ComponentTemplate {
-        const template = config.isTypeScript ? tableTemplate.typescript : tableTemplate.javascript;
-        const hasPagination = config.features?.some(f => f.type === 'pagination') ?? false;
-        const hasFilters = config.features?.some(f => f.type === 'filters') ?? false;
-        const hasSearch = config.features?.some(f => f.type === 'search') ?? false;
-        const hasSorting = config.features?.some(f => f.type === 'sorting') ?? false;
+    private static getAuthComponentTemplate(): string {
+        return `import React, { useState } from 'react';
+import styles from './{{name}}.module.css';
+{{#if isTypeScript}}
+import { AuthService } from '../../services/authService';
 
-        const compiledTemplate = Handlebars.compile(template)({
-            name: config.name,
-            fields: config.features?.[0]?.fields || [],
-            hasPagination,
-            hasFilters,
-            hasSearch,
-            hasSorting
-        });
+interface {{name}}Props {
+    onSuccess: () => void;
+    onError: (error: Error) => void;
+}
 
-        return {
-            name: config.name,
-            component: compiledTemplate,
-            styles: tableStyles,
-            types: ''
-        };
+interface FormData {
+    email: string;
+    password: string;
+}
+{{/if}}
+
+const {{name}} = ({{#if isTypeScript}}props: {{name}}Props{{/if}}) => {
+    const [formData, setFormData] = useState({{#if isTypeScript}}<FormData>{{/if}}({
+        email: '',
+        password: ''
+    }));
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await AuthService.login(formData);
+            props.onSuccess();
+        } catch (error) {
+            props.onError(error instanceof Error ? error : new Error('Erro desconhecido'));
+        }
+    };
+
+    return (
+        <div className={styles.container}>
+            <form onSubmit={handleSubmit} className={styles.form}>
+                <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="Email"
+                    className={styles.input}
+                />
+                <input
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="Senha"
+                    className={styles.input}
+                />
+                <button type="submit" className={styles.button}>
+                    Entrar
+                </button>
+            </form>
+        </div>
+    );
+};
+
+export default {{name}};`;
     }
 
-    private static loadFormTemplate(config: TemplateConfig): ComponentTemplate {
-        const template = config.isTypeScript ? formTemplate.typescript : formTemplate.javascript;
-        const compiledTemplate = Handlebars.compile(template)({
-            name: config.name,
-            fields: config.features?.[0]?.fields || []
+    private static getAuthStylesTemplate(): string {
+        return `.container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: var(--vscode-editor-background);
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 2rem;
+    background-color: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
+    width: 100%;
+    max-width: 400px;
+}
+
+.input {
+    padding: 0.5rem;
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
+    background-color: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+}
+
+.input:focus {
+    outline: none;
+    border-color: var(--vscode-focusBorder);
+}
+
+.button {
+    padding: 0.5rem 1rem;
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.button:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}`;
+    }
+
+    private static getAuthServiceTemplate(): string {
+        return `{{#if isTypeScript}}
+interface LoginData {
+    email: string;
+    password: string;
+}
+{{/if}}
+
+export class AuthService {
+    private static API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+
+    public static async login(data{{#if isTypeScript}}: LoginData{{/if}}) {
+        const response = await fetch(\`\${this.API_URL}/auth/login\`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
         });
 
-        return {
-            name: config.name,
-            component: compiledTemplate,
-            styles: formStyles,
-            types: ''
-        };
+        if (!response.ok) {
+            throw new Error('Falha na autenticação');
+        }
+
+        const result = await response.json();
+        localStorage.setItem('token', result.token);
+        return result;
+    }
+
+    public static logout() {
+        localStorage.removeItem('token');
+    }
+
+    public static getToken() {
+        return localStorage.getItem('token');
+    }
+
+    public static isAuthenticated() {
+        return !!this.getToken();
+    }
+}`;
+    }
+
+    private static getTableComponentTemplate(): string {
+        return `import React, { useState, useEffect } from 'react';
+import styles from './{{name}}.module.css';
+
+{{#if isTypeScript}}
+interface {{name}}Props {
+    data: Array<Record<string, any>>;
+    columns: Array<{
+        key: string;
+        label: string;
+    }>;
+    onSort?: (key: string) => void;
+}
+{{/if}}
+
+const {{name}} = ({{#if isTypeScript}}props: {{name}}Props{{/if}}) => {
+    const [sortKey, setSortKey] = useState('');
+    const [sortDirection, setSortDirection] = useState('asc');
+
+    const handleSort = (key: string) => {
+        if (props.onSort) {
+            const newDirection = key === sortKey && sortDirection === 'asc' ? 'desc' : 'asc';
+            setSortDirection(newDirection);
+            setSortKey(key);
+            props.onSort(key);
+        }
+    };
+
+    return (
+        <div className={styles.container}>
+            <table className={styles.table}>
+                <thead>
+                    <tr>
+                        {props.columns.map((column) => (
+                            <th
+                                key={column.key}
+                                onClick={() => handleSort(column.key)}
+                                className={styles.header}
+                            >
+                                {column.label}
+                                {sortKey === column.key && (
+                                    <span className={styles.sortIcon}>
+                                        {sortDirection === 'asc' ? '↑' : '↓'}
+                                    </span>
+                                )}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {props.data.map((row, index) => (
+                        <tr key={index}>
+                            {props.columns.map((column) => (
+                                <td key={column.key} className={styles.cell}>
+                                    {row[column.key]}
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+};
+
+export default {{name}};`;
+    }
+
+    private static getTableStylesTemplate(): string {
+        return `.container {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: var(--vscode-editor-background);
+    color: var(--vscode-editor-foreground);
+}
+
+.header {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 2px solid var(--vscode-input-border);
+    cursor: pointer;
+    user-select: none;
+}
+
+.header:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+.cell {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--vscode-input-border);
+}
+
+.sortIcon {
+    margin-left: 0.5rem;
+    font-size: 0.8em;
+}
+
+tr:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}`;
+    }
+
+    private static getFormComponentTemplate(): string {
+        return `import React, { useState } from 'react';
+import styles from './{{name}}.module.css';
+
+{{#if isTypeScript}}
+interface {{name}}Props {
+    onSubmit: (data: Record<string, any>) => void;
+    fields: Array<{
+        name: string;
+        label: string;
+        type: string;
+        required?: boolean;
+    }>;
+}
+{{/if}}
+
+const {{name}} = ({{#if isTypeScript}}props: {{name}}Props{{/if}}) => {
+    const [formData, setFormData] = useState({});
+    const [errors, setErrors] = useState({});
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const newErrors = {};
+        
+        props.fields.forEach(field => {
+            if (field.required && !formData[field.name]) {
+                newErrors[field.name] = 'Este campo é obrigatório';
+            }
+        });
+
+        if (Object.keys(newErrors).length === 0) {
+            props.onSubmit(formData);
+        } else {
+            setErrors(newErrors);
+        }
+    };
+
+    const handleChange = (name: string, value: string) => {
+        setFormData(prev => ({ ...prev, [name]: value }));
+        if (errors[name]) {
+            setErrors(prev => ({ ...prev, [name]: undefined }));
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className={styles.form}>
+            {props.fields.map(field => (
+                <div key={field.name} className={styles.field}>
+                    <label className={styles.label}>
+                        {field.label}
+                        {field.required && <span className={styles.required}>*</span>}
+                    </label>
+                    <input
+                        type={field.type}
+                        name={field.name}
+                        value={formData[field.name] || ''}
+                        onChange={(e) => handleChange(field.name, e.target.value)}
+                        className={styles.input}
+                    />
+                    {errors[field.name] && (
+                        <span className={styles.error}>{errors[field.name]}</span>
+                    )}
+                </div>
+            ))}
+            <button type="submit" className={styles.button}>
+                Enviar
+            </button>
+        </form>
+    );
+};
+
+export default {{name}};`;
+    }
+
+    private static getFormStylesTemplate(): string {
+        return `.form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-width: 500px;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.label {
+    color: var(--vscode-editor-foreground);
+    font-weight: 500;
+}
+
+.required {
+    color: var(--vscode-errorForeground);
+    margin-left: 0.25rem;
+}
+
+.input {
+    padding: 0.5rem;
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
+    background-color: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+}
+
+.input:focus {
+    outline: none;
+    border-color: var(--vscode-focusBorder);
+}
+
+.error {
+    color: var(--vscode-errorForeground);
+    font-size: 0.875rem;
+}
+
+.button {
+    padding: 0.5rem 1rem;
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    margin-top: 1rem;
+}
+
+.button:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}`; 
     }
 
     private static toPascalCase(str: string): string {
