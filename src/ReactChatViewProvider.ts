@@ -218,6 +218,10 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
 
     public async generateResponse(request: string): Promise<void> {
         try {
+            // Atualizar UI para mostrar que está processando
+            this._view?.webview.postMessage({ type: 'loading', show: true });
+            this._view?.webview.postMessage({ type: 'thinking', text: 'Analisando sua solicitação...', metadata: { stage: 'analyzing' } });
+
             // Adicionar mensagem do usuário
             await this.saveMessage({ 
                 type: 'user', 
@@ -225,25 +229,15 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                 timestamp: Date.now()
             });
 
-            // Adicionar mensagem de "pensando"
-            await this.saveMessage({
-                type: 'thinking',
-                text: 'Analisando sua solicitação...',
-                timestamp: Date.now(),
-                metadata: { stage: 'analyzing' }
-            });
-
-            // Atualizar UI para mostrar que está processando
-            this._view?.webview.postMessage({ type: 'loading', show: true });
-
             // Processar a solicitação em etapas
-            const stages = [
+            const stages: { stage: 'analyzing' | 'generating' | 'formatting'; text: string }[] = [
                 { stage: 'analyzing', text: 'Analisando estrutura do projeto...' },
                 { stage: 'generating', text: 'Gerando código...' },
                 { stage: 'formatting', text: 'Formatando resposta...' }
             ];
 
             for (const { stage, text } of stages) {
+                this._view?.webview.postMessage({ type: 'thinking', text, metadata: { stage } });
                 await this.saveMessage({
                     type: 'thinking',
                     text,
@@ -293,9 +287,10 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
 
         } catch (error) {
             console.error('Erro ao gerar resposta:', error);
+            this._view?.webview.postMessage({ type: 'error', text: `Erro ao processar sua solicitação: ${error instanceof Error ? error.message : 'Erro desconhecido'}` });
             await this.saveMessage({
                 type: 'error',
-                text: `Erro ao processar sua solicitação: ${error.message}`,
+                text: `Erro ao processar sua solicitação: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
                 timestamp: Date.now()
             });
         } finally {
@@ -356,8 +351,8 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
         });
     }
 
-    private _getHtmlForWebview(webview: vscode.Webview) {
-        return `<!DOCTYPE html>
+    private _getHtmlForWebview(webview: vscode.Webview): string {
+        const html: string = `<!DOCTYPE html>
         <html lang="pt-BR">
         <head>
             <meta charset="UTF-8">
@@ -490,18 +485,35 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                     align-items: center;
                     gap: 4px;
                     border-radius: 4px;
+                    opacity: 0.8;
+                    transition: opacity 0.2s, background-color 0.2s;
                 }
 
                 .action-button:hover {
+                    opacity: 1;
                     background: var(--vscode-button-hoverBackground);
+                }
+
+                .action-button:disabled {
+                    opacity: 0.5;
+                    cursor: not-allowed;
                 }
 
                 .action-button.primary {
                     background: var(--vscode-button-background);
+                    opacity: 1;
                 }
 
                 .action-button.primary:hover {
                     background: var(--vscode-button-hoverBackground);
+                }
+
+                .action-button.danger {
+                    color: var(--vscode-errorForeground);
+                }
+
+                .action-button.danger:hover {
+                    background: var(--vscode-inputValidation-errorBackground);
                 }
 
                 .input-footer {
@@ -667,8 +679,10 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                         placeholder="Pergunte algo sobre React ou peça para gerar código..."
                         rows="1"></textarea>
                     <div class="input-actions">
-                        <button class="action-button" id="clearBtn" title="Limpar histórico">
-                            <span class="codicon codicon-clear-all"></span>
+                        <button class="action-button danger" id="clearBtn" title="Limpar histórico">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path fill-rule="evenodd" clip-rule="evenodd" d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z" fill="currentColor"/>
+                            </svg>
                         </button>
                         <button class="action-button primary" id="sendBtn">
                             <span class="loading" style="display: none;"></span>
@@ -702,6 +716,7 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                 // Notificar que o webview está pronto
                 window.addEventListener('load', () => {
                     vscode.postMessage({ command: 'webviewReady' });
+                    statusBar.style.display = 'flex';
                 });
 
                 function formatTimestamp(timestamp) {
@@ -774,47 +789,43 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                     const messageDiv = document.createElement('div');
                     
                     if (type === 'thinking') {
+                        const existingThinking = document.querySelector('.thinking-message');
+                        if (existingThinking) {
+                            existingThinking.remove();
+                        }
                         messageDiv.className = 'thinking-message';
-                        messageDiv.innerHTML = `
-                            <div class="thinking-indicator">
-                                <div class="thinking-dot"></div>
-                                <div class="thinking-dot"></div>
-                                <div class="thinking-dot"></div>
-                            </div>
-                            <span>${message}</span>
-                            ${metadata.stage ? `<span class="stage-indicator">${metadata.stage}</span>` : ''}
-                        `;
+                        
+                        const indicator = document.createElement('div');
+                        indicator.className = 'thinking-indicator';
+                        
+                        for (let i = 0; i < 3; i++) {
+                            const dot = document.createElement('div');
+                            dot.className = 'thinking-dot';
+                            indicator.appendChild(dot);
+                        }
+                        
+                        const messageSpan = document.createElement('span');
+                        messageSpan.textContent = message;
+                        
+                        messageDiv.appendChild(indicator);
+                        messageDiv.appendChild(messageSpan);
+                        
+                        if (metadata.stage) {
+                            const stageSpan = document.createElement('span');
+                            stageSpan.className = 'stage-indicator';
+                            stageSpan.textContent = metadata.stage;
+                            messageDiv.appendChild(stageSpan);
+                        }
                     } else if (type === 'error') {
                         messageDiv.className = 'error-message';
                         messageDiv.textContent = message;
                     } else {
                         messageDiv.className = 'message ' + type + '-message';
                         
-                        const header = document.createElement('div');
-                        header.className = 'message-header';
-                        
                         const avatar = document.createElement('div');
                         avatar.className = 'message-avatar';
-                        avatar.textContent = type === 'user' ? 'U' : 'A';
+                        avatar.textContent = type === 'user' ? 'U' : type === 'assistant' ? 'A' : 'S';
                         
-                        const info = document.createElement('div');
-                        info.className = 'message-info';
-                        
-                        const author = document.createElement('div');
-                        author.className = 'message-author';
-                        author.textContent = type === 'user' ? 'Você' : 'Assistente';
-                        
-                        const time = document.createElement('span');
-                        time.className = 'message-timestamp';
-                        time.textContent = formatTimestamp(timestamp);
-                        
-                        info.appendChild(author);
-                        info.appendChild(time);
-                        
-                        header.appendChild(avatar);
-                        header.appendChild(info);
-                        messageDiv.appendChild(header);
-
                         const content = document.createElement('div');
                         content.className = 'message-content';
 
@@ -856,11 +867,12 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                             content.textContent = message;
                         }
 
+                        messageDiv.appendChild(avatar);
                         messageDiv.appendChild(content);
                     }
 
                     chatDiv.appendChild(messageDiv);
-                    messageDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    chatDiv.scrollTop = chatDiv.scrollHeight;
                 }
 
                 window.addEventListener('message', event => {
@@ -905,12 +917,19 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
 
                         case 'clearHistory':
                             chatDiv.innerHTML = '';
+                            appendMessage('Histórico limpo com sucesso! 🧹', 'system', Date.now());
                             break;
 
                         case 'setInput':
                             input.value = message.text;
                             input.focus();
                             break;
+                    }
+                });
+
+                clearBtn.addEventListener('click', () => {
+                    if (confirm('Tem certeza que deseja limpar todo o histórico?')) {
+                        vscode.postMessage({ command: 'clearHistory' });
                     }
                 });
 
@@ -928,10 +947,6 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                     }
                 });
 
-                clearBtn.addEventListener('click', () => {
-                    vscode.postMessage({ command: 'clearHistory' });
-                });
-
                 input.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -941,5 +956,6 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
             </script>
         </body>
         </html>`;
+        return html;
     }
 }
