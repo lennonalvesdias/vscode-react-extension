@@ -373,59 +373,135 @@ export default MainLayout;
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
+import styles from './LoginPage.module.css';
 
 interface LoginForm {
     email: string;
     password: string;
 }
 
+interface ValidationErrors {
+    email?: string;
+    password?: string;
+}
+
 const LoginPage: React.FC = () => {
     const navigate = useNavigate();
     const [form, setForm] = useState<LoginForm>({ email: '', password: '' });
-    const [error, setError] = useState<string>('');
+    const [errors, setErrors] = useState<ValidationErrors>({});
+    const [showPassword, setShowPassword] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+
+    const validatePassword = (password: string): boolean => {
+        const hasNumber = /[0-9]/.test(password);
+        const hasLetter = /[a-zA-Z]/.test(password);
+        const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+        const hasMinLength = password.length >= 8;
+
+        return hasNumber && hasLetter && hasSpecial && hasMinLength;
+    };
+
+    const validateForm = (): boolean => {
+        const newErrors: ValidationErrors = {};
+        
+        if (!form.email) {
+            newErrors.email = 'E-mail é obrigatório';
+        } else if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(form.email)) {
+            newErrors.email = 'E-mail inválido';
+        }
+
+        if (!form.password) {
+            newErrors.password = 'Senha é obrigatória';
+        } else if (!validatePassword(form.password)) {
+            newErrors.password = 'A senha deve conter pelo menos 8 caracteres, incluindo números, letras e caracteres especiais';
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
+        
+        if (!validateForm()) {
+            return;
+        }
+
+        setIsLoading(true);
         
         try {
-            await authService.login(form);
+            const response = await authService.login(form);
+            localStorage.setItem('user', JSON.stringify(response.user));
             navigate('/');
         } catch (err) {
-            setError('Email ou senha inválidos');
+            setErrors({ password: 'Credenciais inválidas' });
+        } finally {
+            setIsLoading(false);
         }
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setForm({ ...form, [e.target.name]: e.target.value });
+        const { name, value } = e.target;
+        setForm(prev => ({ ...prev, [name]: value }));
+        if (errors[name as keyof ValidationErrors]) {
+            setErrors(prev => ({ ...prev, [name]: undefined }));
+        }
+    };
+
+    const togglePasswordVisibility = () => {
+        setShowPassword(prev => !prev);
     };
 
     return (
-        <div className="login-page">
-            <form onSubmit={handleSubmit}>
+        <div className={styles.container}>
+            <form onSubmit={handleSubmit} className={styles.form}>
                 <h1>Login</h1>
-                {error && <div className="error">{error}</div>}
-                <div>
-                    <label>Email:</label>
+                
+                <div className={styles.formGroup}>
+                    <label htmlFor="email">E-mail:</label>
                     <input
                         type="email"
+                        id="email"
                         name="email"
                         value={form.email}
                         onChange={handleChange}
-                        required
+                        className={errors.email ? styles.inputError : ''}
+                        disabled={isLoading}
                     />
+                    {errors.email && <span className={styles.errorText}>{errors.email}</span>}
                 </div>
-                <div>
-                    <label>Senha:</label>
-                    <input
-                        type="password"
-                        name="password"
-                        value={form.password}
-                        onChange={handleChange}
-                        required
-                    />
+
+                <div className={styles.formGroup}>
+                    <label htmlFor="password">Senha:</label>
+                    <div className={styles.passwordInput}>
+                        <input
+                            type={showPassword ? 'text' : 'password'}
+                            id="password"
+                            name="password"
+                            value={form.password}
+                            onChange={handleChange}
+                            className={errors.password ? styles.inputError : ''}
+                            disabled={isLoading}
+                        />
+                        <button
+                            type="button"
+                            onClick={togglePasswordVisibility}
+                            className={styles.togglePassword}
+                            disabled={isLoading}
+                        >
+                            {showPassword ? '🔒' : '👁️'}
+                        </button>
+                    </div>
+                    {errors.password && <span className={styles.errorText}>{errors.password}</span>}
                 </div>
-                <button type="submit">Entrar</button>
+
+                <button 
+                    type="submit" 
+                    className={styles.submitButton}
+                    disabled={isLoading}
+                >
+                    {isLoading ? 'Entrando...' : 'Entrar'}
+                </button>
             </form>
         </div>
     );
@@ -436,54 +512,125 @@ export default LoginPage;
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
+import styles from './LoginPage.module.css';
 
 const LoginPage = () => {
     const navigate = useNavigate();
     const [form, setForm] = useState({ email: '', password: '' });
-    const [error, setError] = useState('');
+    const [errors, setErrors] = useState({});
+    const [showPassword, setShowPassword] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+
+    const validatePassword = (password) => {
+        const hasNumber = /[0-9]/.test(password);
+        const hasLetter = /[a-zA-Z]/.test(password);
+        const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+        const hasMinLength = password.length >= 8;
+
+        return hasNumber && hasLetter && hasSpecial && hasMinLength;
+    };
+
+    const validateForm = () => {
+        const newErrors = {};
+        
+        if (!form.email) {
+            newErrors.email = 'E-mail é obrigatório';
+        } else if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(form.email)) {
+            newErrors.email = 'E-mail inválido';
+        }
+
+        if (!form.password) {
+            newErrors.password = 'Senha é obrigatória';
+        } else if (!validatePassword(form.password)) {
+            newErrors.password = 'A senha deve conter pelo menos 8 caracteres, incluindo números, letras e caracteres especiais';
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setError('');
+        
+        if (!validateForm()) {
+            return;
+        }
+
+        setIsLoading(true);
         
         try {
-            await authService.login(form);
+            const response = await authService.login(form);
+            localStorage.setItem('user', JSON.stringify(response.user));
             navigate('/');
         } catch (err) {
-            setError('Email ou senha inválidos');
+            setErrors({ password: 'Credenciais inválidas' });
+        } finally {
+            setIsLoading(false);
         }
     };
 
     const handleChange = (e) => {
-        setForm({ ...form, [e.target.name]: e.target.value });
+        const { name, value } = e.target;
+        setForm(prev => ({ ...prev, [name]: value }));
+        if (errors[name]) {
+            setErrors(prev => ({ ...prev, [name]: undefined }));
+        }
+    };
+
+    const togglePasswordVisibility = () => {
+        setShowPassword(prev => !prev);
     };
 
     return (
-        <div className="login-page">
-            <form onSubmit={handleSubmit}>
+        <div className={styles.container}>
+            <form onSubmit={handleSubmit} className={styles.form}>
                 <h1>Login</h1>
-                {error && <div className="error">{error}</div>}
-                <div>
-                    <label>Email:</label>
+                
+                <div className={styles.formGroup}>
+                    <label htmlFor="email">E-mail:</label>
                     <input
                         type="email"
+                        id="email"
                         name="email"
                         value={form.email}
                         onChange={handleChange}
-                        required
+                        className={errors.email ? styles.inputError : ''}
+                        disabled={isLoading}
                     />
+                    {errors.email && <span className={styles.errorText}>{errors.email}</span>}
                 </div>
-                <div>
-                    <label>Senha:</label>
-                    <input
-                        type="password"
-                        name="password"
-                        value={form.password}
-                        onChange={handleChange}
-                        required
-                    />
+
+                <div className={styles.formGroup}>
+                    <label htmlFor="password">Senha:</label>
+                    <div className={styles.passwordInput}>
+                        <input
+                            type={showPassword ? 'text' : 'password'}
+                            id="password"
+                            name="password"
+                            value={form.password}
+                            onChange={handleChange}
+                            className={errors.password ? styles.inputError : ''}
+                            disabled={isLoading}
+                        />
+                        <button
+                            type="button"
+                            onClick={togglePasswordVisibility}
+                            className={styles.togglePassword}
+                            disabled={isLoading}
+                        >
+                            {showPassword ? '🔒' : '👁️'}
+                        </button>
+                    </div>
+                    {errors.password && <span className={styles.errorText}>{errors.password}</span>}
                 </div>
-                <button type="submit">Entrar</button>
+
+                <button 
+                    type="submit" 
+                    className={styles.submitButton}
+                    disabled={isLoading}
+                >
+                    {isLoading ? 'Entrando...' : 'Entrar'}
+                </button>
             </form>
         </div>
     );
@@ -522,7 +669,7 @@ export default App;
             const aiResponse = await this.aiHelper.parseRequest(response);
             
             if (!aiResponse.newName) {
-                aiResponse.newName = this.inferComponentName(response);
+                aiResponse.newName = this.inferComponentName(typeof response === 'string' ? response : response.toString());
             }
 
             // Verificar se é uma operação de importação/uso
@@ -534,8 +681,8 @@ export default App;
             }
 
             // Determinar o tipo de componente e suas características
-            const componentType = this.inferComponentType(response, aiResponse);
-            const features = this.inferComponentFeatures(response, componentType);
+            const componentType = this.inferComponentType(typeof response === 'string' ? response : response.toString(), aiResponse);
+            const features = this.inferComponentFeatures(typeof response === 'string' ? response : response.toString(), componentType);
 
             const config: ComponentConfig = {
                 name: aiResponse.newName,
@@ -1251,38 +1398,117 @@ export interface Filters {
 
     private getFormStyles(): string {
         return `
+.container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: var(--vscode-editor-background);
+}
+
 .form {
-  max-width: 500px;
-  margin: 0 auto;
+    width: 100%;
+    max-width: 400px;
+    padding: 2rem;
+    background: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.form h1 {
+    text-align: center;
+    margin-bottom: 2rem;
+    color: var(--vscode-editor-foreground);
 }
 
 .formGroup {
-  margin-bottom: 15px;
+    margin-bottom: 1.5rem;
 }
 
 .formGroup label {
-  display: block;
-  margin-bottom: 5px;
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--vscode-editor-foreground);
 }
 
 .formGroup input {
-  width: 100%;
-  padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
+    background: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    font-size: 1rem;
 }
 
-button {
-  padding: 8px 16px;
-  background-color: #0066cc;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
+.formGroup input:focus {
+    outline: none;
+    border-color: var(--vscode-focusBorder);
 }
 
-button:hover {
-  background-color: #0052a3;
+.inputError {
+    border-color: var(--vscode-inputValidation-errorBorder) !important;
+}
+
+.errorText {
+    display: block;
+    margin-top: 0.5rem;
+    color: var(--vscode-inputValidation-errorForeground);
+    font-size: 0.875rem;
+}
+
+.passwordInput {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.passwordInput input {
+    padding-right: 3rem;
+}
+
+.togglePassword {
+    position: absolute;
+    right: 0.75rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.25rem;
+    font-size: 1.25rem;
+    color: var(--vscode-button-foreground);
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.togglePassword:hover {
+    opacity: 1;
+}
+
+.togglePassword:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.submitButton {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.submitButton:hover:not(:disabled) {
+    background: var(--vscode-button-hoverBackground);
+}
+
+.submitButton:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
 }
 `;
     }
