@@ -20,17 +20,17 @@ export const buttonStyles = {
         color: ${colors.badgeText};
         
         &:hover {
-            background-color: ${colors.primaryHover};
+            background-color: ${colors.primaryDark};
         }
     `,
     
     secondary: `
-        background-color: ${colors.secondary};
+        background-color: ${colors.backgroundLight};
         color: ${colors.text};
         border-color: ${colors.border};
         
         &:hover {
-            background-color: ${colors.secondaryHover};
+            background-color: ${colors.backgroundHover};
         }
     `,
     

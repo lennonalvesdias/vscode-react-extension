@@ -15,7 +15,7 @@
     "main": "./out/extension.js",
     "contributes": {
         "viewsContainers": {
-            "panel": [
+            "activitybar": [
                 {
                     "id": "react-chat",
                     "title": "React Chat",
@@ -24,7 +24,7 @@
             ]
         },
         "views": {
-            "panel": [
+            "react-chat": [
                 {
                     "type": "webview",
                     "id": "reactChatView",

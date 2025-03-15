@@ -22,7 +22,7 @@ export const messageStyles = {
     assistant: `
         background-color: ${colors.backgroundInactive};
         margin-right: ${spacing.xl};
-        border-left: 3px solid ${colors.secondary};
+        border-left: 3px solid ${colors.primary};
     `,
     
     error: `

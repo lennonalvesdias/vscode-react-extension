@@ -12,7 +12,7 @@ interface ChatStats {
 }
 
 interface ChatMessage {
-    type: 'user' | 'assistant' | 'error' | 'code' | 'system' | 'suggestion' | 'stats';
+    type: 'user' | 'assistant' | 'error' | 'code' | 'system' | 'suggestion' | 'stats' | 'thinking';
     text: string;
     timestamp: number;
     metadata?: {
@@ -25,6 +25,7 @@ interface ChatMessage {
         codeLanguage?: string;
         stats?: ChatStats;
         undoAvailable?: boolean;
+        stage?: 'analyzing' | 'generating' | 'formatting' | 'complete';
     };
 }
 
@@ -215,6 +216,94 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
         ];
     }
 
+    public async generateResponse(request: string): Promise<void> {
+        try {
+            // Adicionar mensagem do usuário
+            await this.saveMessage({ 
+                type: 'user', 
+                text: request,
+                timestamp: Date.now()
+            });
+
+            // Adicionar mensagem de "pensando"
+            await this.saveMessage({
+                type: 'thinking',
+                text: 'Analisando sua solicitação...',
+                timestamp: Date.now(),
+                metadata: { stage: 'analyzing' }
+            });
+
+            // Atualizar UI para mostrar que está processando
+            this._view?.webview.postMessage({ type: 'loading', show: true });
+
+            // Processar a solicitação em etapas
+            const stages = [
+                { stage: 'analyzing', text: 'Analisando estrutura do projeto...' },
+                { stage: 'generating', text: 'Gerando código...' },
+                { stage: 'formatting', text: 'Formatando resposta...' }
+            ];
+
+            for (const { stage, text } of stages) {
+                await this.saveMessage({
+                    type: 'thinking',
+                    text,
+                    timestamp: Date.now(),
+                    metadata: { stage }
+                });
+                
+                // Simular um pequeno delay para feedback visual
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
+            // Gerar a resposta
+            const result = await this.codeGenerator.generateComponent(request);
+            const codeLanguage = result.toLowerCase().includes('typescript') ? 'typescript' : 'javascript';
+
+            // Remover mensagens de "pensando"
+            const history = await this.getChatHistory();
+            const filteredHistory = history.filter(msg => msg.type !== 'thinking');
+            await this._context.globalState.update(ReactChatViewProvider.CHAT_HISTORY_KEY, filteredHistory);
+
+            // Adicionar resposta final
+            await this.saveMessage({
+                type: 'assistant',
+                text: result,
+                timestamp: Date.now(),
+                metadata: {
+                    action: 'generate',
+                    componentType: 'react',
+                    codeLanguage,
+                    stage: 'complete',
+                    suggestions: this.getSuggestionsForContext()
+                }
+            });
+
+            // Atualizar UI
+            this._view?.webview.postMessage({
+                type: 'response',
+                text: result,
+                metadata: {
+                    action: 'generate',
+                    componentType: 'react',
+                    codeLanguage,
+                    stage: 'complete',
+                    suggestions: this.getSuggestionsForContext()
+                }
+            });
+
+        } catch (error) {
+            console.error('Erro ao gerar resposta:', error);
+            await this.saveMessage({
+                type: 'error',
+                text: `Erro ao processar sua solicitação: ${error.message}`,
+                timestamp: Date.now()
+            });
+        } finally {
+            // Esconder indicador de loading
+            this._view?.webview.postMessage({ type: 'loading', show: false });
+        }
+    }
+
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
         context: vscode.WebviewViewResolveContext,
@@ -247,48 +336,7 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                     ]);
                 }
             } else if (message.command === 'generate') {
-                // Salvar mensagem do usuário
-                await this.saveMessage({ 
-                    type: 'user', 
-                    text: message.text,
-                    timestamp: Date.now()
-                });
-                
-                // Mostrar indicador de loading
-                webviewView.webview.postMessage({ type: 'loading', show: true });
-                
-                const result = await this.codeGenerator.generateComponent(message.text);
-                
-                // Detectar linguagem do código
-                const codeLanguage = result.toLowerCase().includes('typescript') ? 'typescript' : 'javascript';
-                
-                // Salvar resposta do assistente
-                await this.saveMessage({ 
-                    type: 'assistant',
-                    text: result,
-                    timestamp: Date.now(),
-                    metadata: {
-                        action: 'generate',
-                        componentType: 'react',
-                        codeLanguage,
-                        suggestions: this.getSuggestionsForContext()
-                    }
-                });
-                
-                webviewView.webview.postMessage({ 
-                    type: 'response',
-                    text: result,
-                    metadata: {
-                        action: 'generate',
-                        componentType: 'react',
-                        codeLanguage,
-                        suggestions: this.getSuggestionsForContext()
-                    }
-                });
-
-                // Esconder indicador de loading
-                webviewView.webview.postMessage({ type: 'loading', show: false });
-                
+                await this.generateResponse(message.text);
             } else if (message.command === 'clearHistory') {
                 await this.clearHistory();
             } else if (message.command === 'copyCode') {
@@ -316,235 +364,180 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>React Chat</title>
             <style>
-                ${baseStyles}
-
                 body {
+                    margin: 0;
+                    padding: 0;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
                     display: flex;
                     flex-direction: column;
                     height: 100vh;
-                    margin: 0;
-                    padding: 0;
-                    overflow: hidden;
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+                    background: var(--vscode-editor-background);
+                    color: var(--vscode-editor-foreground);
                 }
 
-                #chat { 
+                #chat {
                     flex: 1;
                     overflow-y: auto;
-                    padding: ${spacing.sm};
-                    scroll-behavior: smooth;
-                    position: relative;
-                    background: ${colors.background};
-                }
-
-                #inputArea { 
-                    ${inputStyles.base}
-                    padding: ${spacing.xs} ${spacing.sm};
-                    border-top: 1px solid ${colors.border};
-                    background: ${colors.backgroundLight};
+                    padding: 1rem;
                     display: flex;
                     flex-direction: column;
-                    gap: ${spacing.xs};
-                }
-
-                #userInput {
-                    ${inputStyles.base}
-                    ${inputStyles.textarea}
-                    width: 100%;
-                    min-height: 60px;
-                    max-height: 200px;
-                    resize: none;
-                    margin: 0;
-                    padding: ${spacing.sm};
-                    border: 1px solid ${colors.border};
-                    border-radius: 6px;
-                    background: ${colors.background};
-                    font-size: 14px;
-                    line-height: 1.5;
-                }
-
-                #userInput:focus {
-                    outline: none;
-                    border-color: ${colors.primary};
-                    box-shadow: 0 0 0 2px ${colors.primaryAlpha};
-                }
-
-                .input-footer {
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    padding: 0 ${spacing.xs};
-                }
-
-                .input-actions {
-                    display: flex;
-                    gap: ${spacing.xs};
-                }
-
-                .input-hint {
-                    font-size: 12px;
-                    color: ${colors.textSecondary};
+                    gap: 1rem;
                 }
 
                 .message {
-                    ${messageStyles.base}
-                    margin: ${spacing.md} 0;
-                    padding: ${spacing.md};
-                    border-radius: 8px;
-                    border: 1px solid ${colors.border};
-                }
-
-                .user-message {
-                    ${messageStyles.user}
-                    background: ${colors.backgroundLight};
-                }
-
-                .assistant-message {
-                    ${messageStyles.assistant}
-                }
-
-                .error-message {
-                    ${messageStyles.error}
-                }
-
-                .system-message {
-                    ${messageStyles.system}
-                    font-size: 13px;
-                    padding: ${spacing.sm};
-                    background: ${colors.backgroundInactive};
-                    border: none;
-                }
-
-                .message-header {
                     display: flex;
-                    align-items: center;
-                    gap: ${spacing.sm};
-                    margin-bottom: ${spacing.sm};
+                    gap: 8px;
+                    padding: 8px 0;
+                    line-height: 1.6;
+                    font-size: 13px;
                 }
 
                 .message-avatar {
                     width: 24px;
                     height: 24px;
-                    border-radius: 50%;
-                    background: ${colors.primary};
+                    border-radius: 4px;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    color: white;
-                    font-size: 14px;
-                    font-weight: 500;
-                }
-
-                .message-info {
-                    flex: 1;
-                }
-
-                .message-author {
-                    font-weight: 600;
-                    font-size: 14px;
-                    color: ${colors.text};
-                }
-
-                .message-timestamp {
-                    ${messageStyles.timestamp}
                     font-size: 12px;
-                    color: ${colors.textSecondary};
+                    flex-shrink: 0;
+                }
+
+                .user-message .message-avatar {
+                    background: var(--vscode-textLink-foreground);
+                    color: white;
+                }
+
+                .assistant-message .message-avatar {
+                    background: var(--vscode-symbolIcon-classForeground);
+                    color: white;
+                }
+
+                .message-content {
+                    flex: 1;
+                    overflow-x: auto;
                 }
 
                 .code-block {
-                    background: ${colors.backgroundDark};
-                    border: 1px solid ${colors.border};
+                    background: var(--vscode-editor-background);
+                    border: 1px solid var(--vscode-editor-lineHighlightBorder);
                     border-radius: 6px;
-                    margin: ${spacing.sm} 0;
-                    overflow: hidden;
+                    margin: 8px 0;
                 }
 
                 .code-block-header {
                     display: flex;
                     align-items: center;
                     justify-content: space-between;
-                    padding: ${spacing.sm};
-                    background: ${colors.backgroundLight};
-                    border-bottom: 1px solid ${colors.border};
+                    padding: 6px 12px;
+                    background: var(--vscode-editor-lineHighlightBackground);
+                    border-bottom: 1px solid var(--vscode-editor-lineHighlightBorder);
+                    font-size: 12px;
                 }
 
                 .code-block pre {
                     margin: 0;
-                    padding: ${spacing.md};
+                    padding: 12px;
                     overflow-x: auto;
-                    font-family: 'Fira Code', monospace;
-                    font-size: 13px;
-                    line-height: 1.5;
-                }
-
-                .copy-button {
-                    ${buttonStyles.base}
-                    ${buttonStyles.secondary}
-                    height: 24px;
-                    padding: 0 ${spacing.sm};
+                    font-family: 'SF Mono', Monaco, Menlo, Consolas, 'Ubuntu Mono', monospace;
                     font-size: 12px;
-                    border-radius: 4px;
                 }
 
-                .copy-button:hover {
-                    background: ${colors.backgroundHover};
+                .input-container {
+                    border-top: 1px solid var(--vscode-editor-lineHighlightBorder);
+                    padding: 12px;
+                    background: var(--vscode-editor-background);
+                }
+
+                .input-box {
+                    display: flex;
+                    gap: 8px;
+                    padding: 8px;
+                    background: var(--vscode-input-background);
+                    border: 1px solid var(--vscode-input-border);
+                    border-radius: 6px;
+                }
+
+                #userInput {
+                    flex: 1;
+                    background: transparent;
+                    border: none;
+                    color: var(--vscode-input-foreground);
+                    font-family: inherit;
+                    font-size: 13px;
+                    line-height: 1.6;
+                    resize: none;
+                    padding: 0;
+                    height: 24px;
+                    max-height: 200px;
+                    outline: none;
+                }
+
+                .input-actions {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
                 }
 
                 .action-button {
-                    ${buttonStyles.base}
-                    height: 32px;
-                    padding: 0 ${spacing.md};
-                    font-size: 13px;
-                    border-radius: 6px;
-                    display: inline-flex;
+                    padding: 4px 8px;
+                    background: transparent;
+                    border: none;
+                    color: var(--vscode-button-foreground);
+                    cursor: pointer;
+                    font-size: 12px;
+                    display: flex;
                     align-items: center;
-                    gap: ${spacing.xs};
+                    gap: 4px;
+                    border-radius: 4px;
+                }
+
+                .action-button:hover {
+                    background: var(--vscode-button-hoverBackground);
                 }
 
                 .action-button.primary {
-                    ${buttonStyles.primary}
-                    background: ${colors.primary};
-                    color: white;
+                    background: var(--vscode-button-background);
                 }
 
                 .action-button.primary:hover {
-                    background: ${colors.primaryDark};
+                    background: var(--vscode-button-hoverBackground);
                 }
 
-                .action-button[disabled] {
-                    opacity: 0.5;
-                    cursor: not-allowed;
+                .input-footer {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-top: 8px;
+                    font-size: 11px;
+                    color: var(--vscode-descriptionForeground);
                 }
 
                 .suggestions {
                     display: flex;
                     flex-wrap: wrap;
-                    gap: ${spacing.xs};
-                    margin-top: ${spacing.sm};
+                    gap: 6px;
+                    margin-top: 8px;
                 }
 
                 .suggestion-chip {
-                    ${buttonStyles.base}
-                    ${buttonStyles.secondary}
-                    padding: ${spacing.xs} ${spacing.sm};
                     font-size: 12px;
-                    border-radius: 12px;
-                    background: ${colors.backgroundLight};
-                    border: 1px solid ${colors.border};
-                    color: ${colors.textSecondary};
+                    padding: 2px 8px;
+                    border-radius: 4px;
+                    background: var(--vscode-button-secondaryBackground);
+                    color: var(--vscode-button-secondaryForeground);
+                    cursor: pointer;
+                    border: 1px solid var(--vscode-button-border);
                 }
 
                 .suggestion-chip:hover {
-                    background: ${colors.backgroundHover};
-                    color: ${colors.primary};
-                    border-color: ${colors.primary};
+                    background: var(--vscode-button-secondaryHoverBackground);
                 }
 
                 .loading {
-                    display: inline-block;
-                    width: 16px;
-                    height: 16px;
-                    border: 2px solid ${colors.primary};
+                    width: 14px;
+                    height: 14px;
+                    border: 2px solid var(--vscode-button-foreground);
                     border-radius: 50%;
                     border-top-color: transparent;
                     animation: spin 1s linear infinite;
@@ -554,50 +547,144 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                     to {transform: rotate(360deg);}
                 }
 
-                .notification {
-                    position: fixed;
-                    bottom: ${spacing.md};
-                    right: ${spacing.md};
-                    background: ${colors.notification};
-                    color: ${colors.notificationText};
-                    padding: ${spacing.sm} ${spacing.md};
+                .welcome-message {
+                    text-align: center;
+                    padding: 2rem;
+                    color: var(--vscode-descriptionForeground);
+                }
+
+                .welcome-message h1 {
+                    font-size: 24px;
+                    margin-bottom: 1rem;
+                    color: var(--vscode-editor-foreground);
+                }
+
+                .welcome-message p {
+                    font-size: 14px;
+                    line-height: 1.6;
+                    margin-bottom: 1rem;
+                }
+
+                .thinking-message {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 8px;
+                    background: var(--vscode-editor-background);
                     border-radius: 6px;
                     font-size: 13px;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-                    animation: fadeInOut 2s ease-in-out forwards;
+                    color: var(--vscode-descriptionForeground);
+                }
+
+                .thinking-indicator {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                }
+
+                .thinking-dot {
+                    width: 4px;
+                    height: 4px;
+                    background: var(--vscode-textLink-foreground);
+                    border-radius: 50%;
+                    animation: pulse 1s infinite;
+                }
+
+                .thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+                .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+                @keyframes pulse {
+                    0%, 100% { transform: scale(1); opacity: 0.5; }
+                    50% { transform: scale(1.2); opacity: 1; }
+                }
+
+                .stage-indicator {
+                    font-size: 12px;
+                    color: var(--vscode-textLink-foreground);
+                    margin-left: 8px;
+                }
+
+                .error-message {
+                    background: var(--vscode-inputValidation-errorBackground);
+                    border: 1px solid var(--vscode-inputValidation-errorBorder);
+                    color: var(--vscode-inputValidation-errorForeground);
+                    padding: 8px;
+                    border-radius: 4px;
+                    margin: 8px 0;
+                }
+
+                .status-bar {
+                    position: fixed;
+                    bottom: 0;
+                    left: 0;
+                    right: 0;
+                    padding: 4px 8px;
+                    font-size: 12px;
+                    background: var(--vscode-statusBar-background);
+                    color: var(--vscode-statusBar-foreground);
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
                     z-index: 1000;
                 }
 
-                @keyframes fadeInOut {
-                    0% { opacity: 0; transform: translateY(10px); }
-                    20% { opacity: 1; transform: translateY(0); }
-                    80% { opacity: 1; transform: translateY(0); }
-                    100% { opacity: 0; transform: translateY(-10px); }
+                .status-indicator {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                }
+
+                .status-dot {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    background: var(--vscode-statusBarItem-prominentBackground);
+                }
+
+                .status-dot.active {
+                    animation: blink 1s infinite;
+                }
+
+                @keyframes blink {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.5; }
                 }
             </style>
         </head>
         <body>
             <div id="chat">
-                <div class="placeholder">Carregando...</div>
+                <div class="welcome-message">
+                    <h1>React Chat</h1>
+                    <p>Assistente alimentado por IA para ajudar você a criar e modificar código React.<br>
+                    Revise cuidadosamente o código gerado antes de usar.</p>
+                    <p>Digite / para ver os comandos disponíveis</p>
+                </div>
             </div>
             
-            <div id="inputArea">
-                <textarea id="userInput" 
-                    placeholder="Pergunte algo sobre React ou peça para gerar código..."
-                    rows="1"></textarea>
-                <div class="input-footer">
-                    <div class="input-hint">
-                        Pressione Enter para enviar, Shift+Enter para nova linha
-                    </div>
+            <div class="input-container">
+                <div class="input-box">
+                    <textarea id="userInput" 
+                        placeholder="Pergunte algo sobre React ou peça para gerar código..."
+                        rows="1"></textarea>
                     <div class="input-actions">
                         <button class="action-button" id="clearBtn" title="Limpar histórico">
-                            Limpar
+                            <span class="codicon codicon-clear-all"></span>
                         </button>
                         <button class="action-button primary" id="sendBtn">
                             <span class="loading" style="display: none;"></span>
                             <span>Enviar</span>
                         </button>
                     </div>
+                </div>
+                <div class="input-footer">
+                    <span>Enter ⏎ para enviar, Shift+Enter para nova linha</span>
+                </div>
+            </div>
+
+            <div class="status-bar" style="display: none;">
+                <div class="status-indicator">
+                    <div class="status-dot"></div>
+                    <span class="status-text">Pronto</span>
                 </div>
             </div>
             
@@ -608,9 +695,9 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                 const sendBtn = document.getElementById('sendBtn');
                 const clearBtn = document.getElementById('clearBtn');
                 const loading = sendBtn.querySelector('.loading');
-                const statsBtn = document.getElementById('statsBtn');
-                const undoBtn = document.getElementById('undoBtn');
-                const statsCount = document.getElementById('statsCount');
+                const statusBar = document.querySelector('.status-bar');
+                const statusDot = statusBar.querySelector('.status-dot');
+                const statusText = statusBar.querySelector('.status-text');
 
                 // Notificar que o webview está pronto
                 window.addEventListener('load', () => {
@@ -677,114 +764,165 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                     return container;
                 }
 
+                function updateStatus(isActive, text) {
+                    statusBar.style.display = 'flex';
+                    statusDot.classList.toggle('active', isActive);
+                    statusText.textContent = text;
+                }
+
                 function appendMessage(message, type = 'user', timestamp = Date.now(), metadata = {}) {
                     const messageDiv = document.createElement('div');
-                    messageDiv.className = 'message ' + type + '-message';
                     
-                    const shouldScroll = chatDiv.scrollTop + chatDiv.clientHeight >= chatDiv.scrollHeight - 100;
-                    
-                    const header = document.createElement('div');
-                    header.className = 'message-header';
-                    
-                    const avatar = document.createElement('div');
-                    avatar.className = 'message-avatar';
-                    avatar.textContent = type === 'user' ? 'U' : 'A';
-                    
-                    const info = document.createElement('div');
-                    info.className = 'message-info';
-                    
-                    const author = document.createElement('div');
-                    author.className = 'message-author';
-                    author.textContent = type === 'user' ? 'Você' : 'Assistente';
-                    
-                    const time = document.createElement('span');
-                    time.className = 'message-timestamp';
-                    time.textContent = formatTimestamp(timestamp);
-                    
-                    info.appendChild(author);
-                    info.appendChild(time);
-                    
-                    header.appendChild(avatar);
-                    header.appendChild(info);
-                    messageDiv.appendChild(header);
+                    if (type === 'thinking') {
+                        messageDiv.className = 'thinking-message';
+                        messageDiv.innerHTML = `
+                            <div class="thinking-indicator">
+                                <div class="thinking-dot"></div>
+                                <div class="thinking-dot"></div>
+                                <div class="thinking-dot"></div>
+                            </div>
+                            <span>${message}</span>
+                            ${metadata.stage ? `<span class="stage-indicator">${metadata.stage}</span>` : ''}
+                        `;
+                    } else if (type === 'error') {
+                        messageDiv.className = 'error-message';
+                        messageDiv.textContent = message;
+                    } else {
+                        messageDiv.className = 'message ' + type + '-message';
+                        
+                        const header = document.createElement('div');
+                        header.className = 'message-header';
+                        
+                        const avatar = document.createElement('div');
+                        avatar.className = 'message-avatar';
+                        avatar.textContent = type === 'user' ? 'U' : 'A';
+                        
+                        const info = document.createElement('div');
+                        info.className = 'message-info';
+                        
+                        const author = document.createElement('div');
+                        author.className = 'message-author';
+                        author.textContent = type === 'user' ? 'Você' : 'Assistente';
+                        
+                        const time = document.createElement('span');
+                        time.className = 'message-timestamp';
+                        time.textContent = formatTimestamp(timestamp);
+                        
+                        info.appendChild(author);
+                        info.appendChild(time);
+                        
+                        header.appendChild(avatar);
+                        header.appendChild(info);
+                        messageDiv.appendChild(header);
 
-                    const content = document.createElement('div');
-                    content.className = 'message-content';
+                        const content = document.createElement('div');
+                        content.className = 'message-content';
 
-                    if (type === 'assistant') {
-                        const codeBlocks = message.match(/\`\`\`[\\s\\S]*?\`\`\`/g) || [];
-                        let remainingText = message;
+                        if (type === 'assistant') {
+                            const codeBlocks = message.match(/\`\`\`[\\s\\S]*?\`\`\`/g) || [];
+                            let remainingText = message;
 
-                        if (codeBlocks.length > 0) {
-                            codeBlocks.forEach(block => {
-                                const parts = remainingText.split(block);
-                                if (parts[0]) {
+                            if (codeBlocks.length > 0) {
+                                codeBlocks.forEach(block => {
+                                    const parts = remainingText.split(block);
+                                    if (parts[0]) {
+                                        const textNode = document.createElement('p');
+                                        textNode.textContent = parts[0].trim();
+                                        content.appendChild(textNode);
+                                    }
+
+                                    const code = block.replace(/\`\`\`/g, '').trim();
+                                    content.appendChild(createCodeBlock(code, metadata.codeLanguage));
+
+                                    remainingText = parts[1];
+                                });
+
+                                if (remainingText) {
                                     const textNode = document.createElement('p');
-                                    textNode.textContent = parts[0].trim();
+                                    textNode.textContent = remainingText.trim();
                                     content.appendChild(textNode);
                                 }
+                            } else {
+                                content.textContent = message;
+                            }
 
-                                const code = block.replace(/\`\`\`/g, '').trim();
-                                content.appendChild(createCodeBlock(code, metadata.codeLanguage));
-
-                                remainingText = parts[1];
-                            });
-
-                            if (remainingText) {
-                                const textNode = document.createElement('p');
-                                textNode.textContent = remainingText.trim();
-                                content.appendChild(textNode);
+                            if (metadata.suggestions) {
+                                const suggestionsElement = createSuggestions(metadata.suggestions);
+                                if (suggestionsElement) {
+                                    content.appendChild(suggestionsElement);
+                                }
                             }
                         } else {
                             content.textContent = message;
                         }
 
-                        if (metadata.suggestions) {
-                            const suggestionsElement = createSuggestions(metadata.suggestions);
-                            if (suggestionsElement) {
-                                content.appendChild(suggestionsElement);
-                            }
-                        }
-                    } else {
-                        content.textContent = message;
+                        messageDiv.appendChild(content);
                     }
 
-                    messageDiv.appendChild(content);
                     chatDiv.appendChild(messageDiv);
-                    
-                    if (shouldScroll) {
-                        setTimeout(() => {
-                            messageDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
-                        }, 100);
+                    messageDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                }
+
+                window.addEventListener('message', event => {
+                    const message = event.data;
+
+                    switch (message.type) {
+                        case 'loading':
+                            loading.style.display = message.show ? 'inline-block' : 'none';
+                            sendBtn.disabled = message.show;
+                            updateStatus(message.show, message.show ? 'Processando...' : 'Pronto');
+                            break;
+
+                        case 'thinking':
+                            appendMessage(message.text, 'thinking', Date.now(), message.metadata);
+                            updateStatus(true, message.metadata?.stage || 'Processando...');
+                            break;
+
+                        case 'response':
+                            appendMessage(message.text, 'assistant', Date.now(), message.metadata);
+                            updateStatus(false, 'Pronto');
+                            break;
+
+                        case 'error':
+                            appendMessage(message.text, 'error', Date.now());
+                            updateStatus(false, 'Erro');
+                            break;
+
+                        case 'system':
+                            appendMessage(message.text, 'system', Date.now(), message.metadata);
+                            break;
+
+                        case 'notification':
+                            // TODO: Implementar notificações toast
+                            break;
+
+                        case 'loadHistory':
+                            chatDiv.innerHTML = '';
+                            message.history.forEach(msg => {
+                                appendMessage(msg.text, msg.type, msg.timestamp, msg.metadata);
+                            });
+                            break;
+
+                        case 'clearHistory':
+                            chatDiv.innerHTML = '';
+                            break;
+
+                        case 'setInput':
+                            input.value = message.text;
+                            input.focus();
+                            break;
                     }
-                }
+                });
 
-                function showNotification(text) {
-                    const notification = document.createElement('div');
-                    notification.className = 'notification';
-                    notification.textContent = text;
-                    document.body.appendChild(notification);
-                    
-                    setTimeout(() => {
-                        notification.remove();
-                    }, 2000);
-                }
-
-                function adjustTextareaHeight() {
+                input.addEventListener('input', () => {
                     input.style.height = 'auto';
-                    input.style.height = (input.scrollHeight) + 'px';
-                }
-
-                input.addEventListener('input', adjustTextareaHeight);
+                    input.style.height = input.scrollHeight + 'px';
+                });
 
                 sendBtn.addEventListener('click', () => {
-                    const userMessage = input.value.trim();
-                    if (userMessage) {
-                        appendMessage(userMessage, 'user');
-                        vscode.postMessage({ 
-                            command: 'generate',
-                            text: userMessage
-                        });
+                    const text = input.value.trim();
+                    if (text) {
+                        vscode.postMessage({ command: 'generate', text });
                         input.value = '';
                         input.style.height = 'auto';
                     }
@@ -800,62 +938,8 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                         sendBtn.click();
                     }
                 });
-
-                statsBtn.addEventListener('click', () => {
-                    vscode.postMessage({ command: 'showStats' });
-                });
-                
-                undoBtn.addEventListener('click', () => {
-                    vscode.postMessage({ command: 'undo' });
-                });
-
-                window.addEventListener('message', event => {
-                    const message = event.data;
-                    
-                    if (message.type === 'loading') {
-                        loading.style.display = message.show ? 'inline-block' : 'none';
-                        sendBtn.disabled = message.show;
-                    } else if (message.type === 'response') {
-                        appendMessage(message.text, 'assistant', Date.now(), message.metadata);
-                    } else if (message.type === 'error') {
-                        appendMessage(message.text, 'error', Date.now());
-                    } else if (message.type === 'system') {
-                        appendMessage(message.text, 'system', Date.now(), message.metadata);
-                    } else if (message.type === 'notification') {
-                        showNotification(message.text);
-                    } else if (message.type === 'loadHistory') {
-                        chatDiv.innerHTML = '';
-                        message.history.forEach(msg => {
-                            appendMessage(msg.text, msg.type, msg.timestamp, msg.metadata);
-                        });
-                        // Garantir que após carregar o histórico, role para o final
-                        setTimeout(() => {
-                            chatDiv.scrollTop = chatDiv.scrollHeight;
-                        }, 100);
-                    } else if (message.type === 'clearChat') {
-                        chatDiv.innerHTML = '';
-                        input.value = '';
-                        input.style.height = 'auto';
-                    } else if (message.type === 'setInput') {
-                        input.value = message.text;
-                        input.focus();
-                        adjustTextareaHeight();
-                    } else if (message.type === 'statsUpdate') {
-                        const total = message.stats.filesCreated + message.stats.filesModified;
-                        statsCount.textContent = total;
-                        
-                        if (message.text) {
-                            appendMessage(message.text, 'stats');
-                        }
-                    } else if (message.type === 'undoAvailable') {
-                        undoBtn.disabled = !message.available;
-                    }
-                });
-
-                // Foco inicial no input
-                input.focus();
             </script>
         </body>
         </html>`;
     }
-} 
+}

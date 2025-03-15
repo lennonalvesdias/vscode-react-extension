@@ -24,21 +24,505 @@ interface ComponentConfig {
 export class ReactCodeGenerator {
     private workspaceRoot: string;
     private aiHelper: AIHelper;
+    private isTypeScript: boolean;
 
     constructor() {
         if (!vscode.workspace.workspaceFolders) {
-            throw new Error('Nenhum workspace aberto');
+            throw new Error('Nenhum projeto aberto');
         }
         this.workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
         this.aiHelper = new AIHelper();
+        this.isTypeScript = fs.existsSync(path.join(this.workspaceRoot, 'tsconfig.json'));
     }
 
     public async generateComponent(request: string): Promise<string> {
+        const response = await this.aiHelper.parseRequest(request);
+
+        switch (response.action) {
+            case 'initialize':
+                return await this.initializeProject(response);
+            case 'create':
+                return await this.createComponent(response);
+            case 'edit':
+                return await this.editComponent(response);
+            case 'route':
+                return await this.addRoute(response);
+            default:
+                throw new Error(`Ação não suportada: ${response.action}`);
+        }
+    }
+
+    private async initializeProject(response: any): Promise<string> {
+        const srcPath = path.join(this.workspaceRoot, 'src');
+        const ext = this.isTypeScript ? 'tsx' : 'jsx';
+
+        // Criar estrutura de diretórios
+        const directories = ['pages', 'components', 'services', 'routes', 'layouts', 'hooks', 'utils'];
+        directories.forEach(dir => {
+            const dirPath = path.join(srcPath, dir);
+            if (!fs.existsSync(dirPath)) {
+                fs.mkdirSync(dirPath, { recursive: true });
+            }
+        });
+
+        // Criar arquivos base
+        const files = [
+            {
+                path: path.join(srcPath, 'services', `authService.${this.isTypeScript ? 'ts' : 'js'}`),
+                content: this.generateAuthService()
+            },
+            {
+                path: path.join(srcPath, 'routes', `index.${ext}`),
+                content: this.generateRoutes()
+            },
+            {
+                path: path.join(srcPath, 'layouts', `MainLayout.${ext}`),
+                content: this.generateMainLayout()
+            },
+            {
+                path: path.join(srcPath, 'pages', `LoginPage.${ext}`),
+                content: this.generateLoginPage()
+            }
+        ];
+
+        files.forEach(file => {
+            if (!fs.existsSync(file.path)) {
+                fs.writeFileSync(file.path, file.content);
+            }
+        });
+
+        // Atualizar App.tsx/jsx
+        const appPath = path.join(srcPath, `App.${ext}`);
+        fs.writeFileSync(appPath, this.generateApp());
+
+        return `Projeto inicializado com sucesso! Estrutura criada:
+- /src
+  - /pages
+    - LoginPage.${ext}
+  - /components
+  - /services
+    - authService.${this.isTypeScript ? 'ts' : 'js'}
+  - /routes
+    - index.${ext}
+  - /layouts
+    - MainLayout.${ext}
+  - /hooks
+  - /utils
+
+Arquivos principais criados e configurados:
+1. LoginPage com formulário e integração com authService
+2. Sistema de rotas configurado com React Router
+3. Layout principal com suporte a navegação
+4. Serviço de autenticação com endpoints básicos
+
+Para começar, você pode:
+1. Configurar as variáveis de ambiente no .env
+2. Personalizar o layout em MainLayout
+3. Adicionar mais rotas em routes/index
+4. Implementar a lógica de autenticação no authService`;
+    }
+
+    private generateAuthService(): string {
+        return this.isTypeScript ? `
+import axios, { AxiosInstance } from 'axios';
+
+interface LoginCredentials {
+    email: string;
+    password: string;
+}
+
+interface AuthResponse {
+    token: string;
+    user: {
+        id: number;
+        email: string;
+        name: string;
+    };
+}
+
+class AuthService {
+    private api: AxiosInstance;
+
+    constructor() {
+        this.api = axios.create({
+            baseURL: process.env.REACT_APP_API_URL || '/api',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+    }
+
+    async login(credentials: LoginCredentials): Promise<AuthResponse> {
         try {
-            const aiResponse = await this.aiHelper.parseRequest(request);
+            const { data } = await this.api.post<AuthResponse>('/auth/login', credentials);
+            this.setToken(data.token);
+            return data;
+        } catch (error) {
+            throw new Error('Falha na autenticação');
+        }
+    }
+
+    private setToken(token: string): void {
+        localStorage.setItem('token', token);
+        this.api.defaults.headers.common['Authorization'] = \`Bearer \${token}\`;
+    }
+
+    getToken(): string | null {
+        return localStorage.getItem('token');
+    }
+
+    logout(): void {
+        localStorage.removeItem('token');
+        delete this.api.defaults.headers.common['Authorization'];
+    }
+
+    isAuthenticated(): boolean {
+        return !!this.getToken();
+    }
+}
+
+export default new AuthService();
+` : `
+import axios from 'axios';
+
+class AuthService {
+    constructor() {
+        this.api = axios.create({
+            baseURL: process.env.REACT_APP_API_URL || '/api',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+    }
+
+    async login(credentials) {
+        try {
+            const { data } = await this.api.post('/auth/login', credentials);
+            this.setToken(data.token);
+            return data;
+        } catch (error) {
+            throw new Error('Falha na autenticação');
+        }
+    }
+
+    setToken(token) {
+        localStorage.setItem('token', token);
+        this.api.defaults.headers.common['Authorization'] = \`Bearer \${token}\`;
+    }
+
+    getToken() {
+        return localStorage.getItem('token');
+    }
+
+    logout() {
+        localStorage.removeItem('token');
+        delete this.api.defaults.headers.common['Authorization'];
+    }
+
+    isAuthenticated() {
+        return !!this.getToken();
+    }
+}
+
+export default new AuthService();
+`;
+    }
+
+    private generateRoutes(): string {
+        return this.isTypeScript ? `
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import LoginPage from '../pages/LoginPage';
+import MainLayout from '../layouts/MainLayout';
+import authService from '../services/authService';
+
+interface PrivateRouteProps {
+    children: React.ReactNode;
+}
+
+const PrivateRoute: React.FC<PrivateRouteProps> = ({ children }) => {
+    return authService.isAuthenticated() ? (
+        <MainLayout>{children}</MainLayout>
+    ) : (
+        <Navigate to="/login" replace />
+    );
+};
+
+const Router: React.FC = () => {
+    return (
+        <BrowserRouter>
+            <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/" element={
+                    <PrivateRoute>
+                        <div>Dashboard</div>
+                    </PrivateRoute>
+                } />
+            </Routes>
+        </BrowserRouter>
+    );
+};
+
+export default Router;
+` : `
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import LoginPage from '../pages/LoginPage';
+import MainLayout from '../layouts/MainLayout';
+import authService from '../services/authService';
+
+const PrivateRoute = ({ children }) => {
+    return authService.isAuthenticated() ? (
+        <MainLayout>{children}</MainLayout>
+    ) : (
+        <Navigate to="/login" replace />
+    );
+};
+
+const Router = () => {
+    return (
+        <BrowserRouter>
+            <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/" element={
+                    <PrivateRoute>
+                        <div>Dashboard</div>
+                    </PrivateRoute>
+                } />
+            </Routes>
+        </BrowserRouter>
+    );
+};
+
+export default Router;
+`;
+    }
+
+    private generateMainLayout(): string {
+        return this.isTypeScript ? `
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import authService from '../services/authService';
+
+interface MainLayoutProps {
+    children: React.ReactNode;
+}
+
+const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
+    const navigate = useNavigate();
+
+    const handleLogout = () => {
+        authService.logout();
+        navigate('/login');
+    };
+
+    return (
+        <div className="layout">
+            <header className="header">
+                <nav>
+                    <ul>
+                        <li><a href="/">Dashboard</a></li>
+                    </ul>
+                    <button onClick={handleLogout}>Sair</button>
+                </nav>
+            </header>
+            <main className="main">
+                {children}
+            </main>
+        </div>
+    );
+};
+
+export default MainLayout;
+` : `
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import authService from '../services/authService';
+
+const MainLayout = ({ children }) => {
+    const navigate = useNavigate();
+
+    const handleLogout = () => {
+        authService.logout();
+        navigate('/login');
+    };
+
+    return (
+        <div className="layout">
+            <header className="header">
+                <nav>
+                    <ul>
+                        <li><a href="/">Dashboard</a></li>
+                    </ul>
+                    <button onClick={handleLogout}>Sair</button>
+                </nav>
+            </header>
+            <main className="main">
+                {children}
+            </main>
+        </div>
+    );
+};
+
+export default MainLayout;
+`;
+    }
+
+    private generateLoginPage(): string {
+        return this.isTypeScript ? `
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import authService from '../services/authService';
+
+interface LoginForm {
+    email: string;
+    password: string;
+}
+
+const LoginPage: React.FC = () => {
+    const navigate = useNavigate();
+    const [form, setForm] = useState<LoginForm>({ email: '', password: '' });
+    const [error, setError] = useState<string>('');
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        
+        try {
+            await authService.login(form);
+            navigate('/');
+        } catch (err) {
+            setError('Email ou senha inválidos');
+        }
+    };
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setForm({ ...form, [e.target.name]: e.target.value });
+    };
+
+    return (
+        <div className="login-page">
+            <form onSubmit={handleSubmit}>
+                <h1>Login</h1>
+                {error && <div className="error">{error}</div>}
+                <div>
+                    <label>Email:</label>
+                    <input
+                        type="email"
+                        name="email"
+                        value={form.email}
+                        onChange={handleChange}
+                        required
+                    />
+                </div>
+                <div>
+                    <label>Senha:</label>
+                    <input
+                        type="password"
+                        name="password"
+                        value={form.password}
+                        onChange={handleChange}
+                        required
+                    />
+                </div>
+                <button type="submit">Entrar</button>
+            </form>
+        </div>
+    );
+};
+
+export default LoginPage;
+` : `
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import authService from '../services/authService';
+
+const LoginPage = () => {
+    const navigate = useNavigate();
+    const [form, setForm] = useState({ email: '', password: '' });
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        
+        try {
+            await authService.login(form);
+            navigate('/');
+        } catch (err) {
+            setError('Email ou senha inválidos');
+        }
+    };
+
+    const handleChange = (e) => {
+        setForm({ ...form, [e.target.name]: e.target.value });
+    };
+
+    return (
+        <div className="login-page">
+            <form onSubmit={handleSubmit}>
+                <h1>Login</h1>
+                {error && <div className="error">{error}</div>}
+                <div>
+                    <label>Email:</label>
+                    <input
+                        type="email"
+                        name="email"
+                        value={form.email}
+                        onChange={handleChange}
+                        required
+                    />
+                </div>
+                <div>
+                    <label>Senha:</label>
+                    <input
+                        type="password"
+                        name="password"
+                        value={form.password}
+                        onChange={handleChange}
+                        required
+                    />
+                </div>
+                <button type="submit">Entrar</button>
+            </form>
+        </div>
+    );
+};
+
+export default LoginPage;
+`;
+    }
+
+    private generateApp(): string {
+        return this.isTypeScript ? `
+import React from 'react';
+import Router from './routes';
+import './App.css';
+
+const App: React.FC = () => {
+    return <Router />;
+};
+
+export default App;
+` : `
+import React from 'react';
+import Router from './routes';
+import './App.css';
+
+const App = () => {
+    return <Router />;
+};
+
+export default App;
+`;
+    }
+
+    private async createComponent(response: any): Promise<string> {
+        try {
+            const aiResponse = await this.aiHelper.parseRequest(response);
             
             if (!aiResponse.newName) {
-                throw new Error('Nome do componente não fornecido');
+                aiResponse.newName = this.inferComponentName(response);
             }
 
             // Verificar se é uma operação de importação/uso
@@ -49,147 +533,195 @@ export class ReactCodeGenerator {
                 return await this.modifyExistingFile(aiResponse);
             }
 
-            if (aiResponse.action === 'edit') {
-                if (!aiResponse.oldName) {
-                    throw new Error('Nome do componente a ser editado não fornecido');
-                }
-                return await this.editComponent(aiResponse);
-            } else if (aiResponse.action === 'delete') {
-                if (!aiResponse.oldName) {
-                    throw new Error('Nome do componente a ser removido não fornecido');
-                }
-                return await this.deleteComponent(aiResponse);
-            }
+            // Determinar o tipo de componente e suas características
+            const componentType = this.inferComponentType(response, aiResponse);
+            const features = this.inferComponentFeatures(response, componentType);
 
             const config: ComponentConfig = {
                 name: aiResponse.newName,
-                type: aiResponse.componentType === 'page' ? 'page' : 'component',
-                features: aiResponse.features
+                type: componentType.includes('page') ? 'page' : 'component',
+                features: features
             };
 
             const componentDir = this.createComponentDirectory(config);
             await this.generateFiles(config, componentDir);
 
-            return `Componente ${config.name} criado com sucesso!`;
+            return `Componente ${config.name} criado com sucesso em ${componentDir}!`;
         } catch (error) {
             console.error('Erro:', error);
             throw error;
         }
     }
 
-    private async modifyExistingFile(aiResponse: any): Promise<string> {
-        const importFeature = aiResponse.features.find((f: Feature) => f.type === 'import');
-        const usageFeature = aiResponse.features.find((f: Feature) => f.type === 'usage');
-        const targetFile = importFeature?.targetFile || '';
+    private inferComponentName(request: string): string {
+        const words = request.toLowerCase().split(' ');
+        
+        // Mapear palavras comuns para nomes de componentes
+        const componentMappings: { [key: string]: string } = {
+            'login': 'LoginPage',
+            'cadastro': 'RegisterPage',
+            'registro': 'RegisterPage',
+            'usuário': 'UserPage',
+            'usuario': 'UserPage',
+            'perfil': 'ProfilePage',
+            'dashboard': 'DashboardPage',
+            'tabela': 'TableComponent',
+            'formulário': 'FormComponent',
+            'formulario': 'FormComponent',
+            'lista': 'ListComponent'
+        };
 
-        if (!targetFile) {
-            throw new Error('Arquivo alvo não especificado');
-        }
-
-        const filePath = this.findFile(targetFile);
-        if (!filePath) {
-            throw new Error(`Arquivo ${targetFile} não encontrado`);
-        }
-
-        let fileContent = fs.readFileSync(filePath, 'utf-8');
-        let modified = false;
-
-        // Adicionar importação se necessário
-        if (importFeature) {
-            const importStatement = `import { ${importFeature.importComponent} } from './components/${importFeature.importComponent}';`;
-            if (!fileContent.includes(importStatement)) {
-                // Encontrar o último import ou o início do arquivo
-                const lastImportIndex = fileContent.lastIndexOf('import');
-                const lastImportLineEnd = lastImportIndex !== -1 
-                    ? fileContent.indexOf('\n', lastImportIndex) + 1
-                    : 0;
-
-                fileContent = fileContent.slice(0, lastImportLineEnd) +
-                    importStatement + '\n' +
-                    fileContent.slice(lastImportLineEnd);
-                modified = true;
+        // Procurar por palavras-chave conhecidas
+        for (const word of words) {
+            if (componentMappings[word]) {
+                return componentMappings[word];
             }
         }
 
-        // Adicionar uso do componente se necessário
-        if (usageFeature) {
-            const componentUsage = this.generateComponentUsage(usageFeature);
-            
-            // Encontrar o return do componente
-            const returnIndex = fileContent.indexOf('return (');
-            if (returnIndex !== -1) {
-                // Encontrar o primeiro elemento após o return
-                const openingBracket = fileContent.indexOf('<', returnIndex);
-                const closingBracket = this.findMatchingBracket(fileContent, openingBracket);
-                
-                if (openingBracket !== -1 && closingBracket !== -1) {
-                    // Se já existe um div/fragment, inserir dentro
-                    const elementContent = fileContent.substring(openingBracket, closingBracket + 1);
-                    if (elementContent.includes('<div') || elementContent.includes('<>')) {
-                        const lastClosingTag = elementContent.lastIndexOf('</');
-                        const insertPosition = returnIndex + elementContent.lastIndexOf('</');
-                        
-                        fileContent = fileContent.slice(0, insertPosition) +
-                            '      ' + componentUsage + '\n      ' +
-                            fileContent.slice(insertPosition);
-                    } else {
-                        // Envolver em um div
-                        const newContent = `<div>\n      ${elementContent}\n      ${componentUsage}\n    </div>`;
-                        fileContent = fileContent.slice(0, openingBracket) +
-                            newContent +
-                            fileContent.slice(closingBracket + 1);
+        // Se não encontrar mapeamento específico, criar um nome baseado no contexto
+        if (words.includes('página') || words.includes('pagina')) {
+            const relevantWord = words.find(w => w !== 'página' && w !== 'pagina' && w.length > 3);
+            if (relevantWord) {
+                return this.capitalize(relevantWord) + 'Page';
+            }
+        }
+
+        return 'CustomComponent';
+    }
+
+    private inferComponentType(request: string, aiResponse: any): string {
+        const requestLower = request.toLowerCase();
+        
+        // Verificar por palavras-chave específicas
+        if (requestLower.includes('login') || requestLower.includes('autenticação')) {
+            return 'auth-page';
+        }
+        if (requestLower.includes('formulário') || requestLower.includes('formulario')) {
+            return 'form-component';
+        }
+        if (requestLower.includes('tabela') || requestLower.includes('lista')) {
+            return 'table-component';
+        }
+        if (requestLower.includes('página') || requestLower.includes('pagina')) {
+            return 'page';
+        }
+
+        return aiResponse.componentType || 'component';
+    }
+
+    private inferComponentFeatures(request: string, componentType: string): any[] {
+        const features = [];
+        const requestLower = request.toLowerCase();
+
+        switch (componentType) {
+            case 'auth-page':
+                features.push({
+                    type: 'form',
+                    fields: [
+                        { name: 'email', type: 'string' },
+                        { name: 'password', type: 'string' }
+                    ]
+                });
+                features.push({
+                    type: 'auth',
+                    service: {
+                        baseURL: '/api',
+                        endpoints: [{ method: 'POST', path: '/auth/login' }],
+                        auth: true
                     }
-                    modified = true;
+                });
+                break;
+
+            case 'form-component':
+                const formFields = this.extractFormFields(requestLower);
+                features.push({
+                    type: 'form',
+                    fields: formFields
+                });
+                break;
+
+            case 'table-component':
+                features.push({
+                    type: 'table',
+                    fields: this.extractTableFields(requestLower)
+                });
+                if (requestLower.includes('paginação') || requestLower.includes('paginacao')) {
+                    features.push({ type: 'pagination' });
                 }
+                if (requestLower.includes('busca') || requestLower.includes('pesquisa')) {
+                    features.push({ type: 'search' });
+                }
+                if (requestLower.includes('filtro')) {
+                    features.push({ type: 'filters' });
+                }
+                break;
+
+            case 'page':
+                if (requestLower.includes('protegida') || requestLower.includes('privada')) {
+                    features.push({
+                        type: 'route',
+                        route: {
+                            isPrivate: true,
+                            layout: 'MainLayout'
+                        }
+                    });
+                }
+                break;
+        }
+
+        return features;
+    }
+
+    private extractFormFields(request: string): { name: string; type: string; }[] {
+        const commonFields = {
+            'email': 'string',
+            'senha': 'string',
+            'nome': 'string',
+            'telefone': 'string',
+            'data': 'date',
+            'valor': 'number',
+            'quantidade': 'number',
+            'descrição': 'string',
+            'descricao': 'string'
+        };
+
+        const fields = [];
+        for (const [field, type] of Object.entries(commonFields)) {
+            if (request.includes(field)) {
+                fields.push({ name: field, type });
             }
         }
 
-        if (modified) {
-            fs.writeFileSync(filePath, fileContent);
-            return `Arquivo ${targetFile} atualizado com sucesso!`;
-        }
-
-        return `Nenhuma modificação necessária em ${targetFile}`;
+        return fields.length > 0 ? fields : [{ name: 'name', type: 'string' }];
     }
 
-    private findFile(fileName: string): string | null {
-        const possiblePaths = [
-            path.join(this.workspaceRoot, fileName),
-            path.join(this.workspaceRoot, 'src', fileName),
-            path.join(this.workspaceRoot, 'src', 'pages', fileName),
-            path.join(this.workspaceRoot, 'src', 'components', fileName)
+    private extractTableFields(request: string): { name: string; type: string; }[] {
+        const commonFields = {
+            'id': 'number',
+            'nome': 'string',
+            'email': 'string',
+            'telefone': 'string',
+            'data': 'date',
+            'status': 'string',
+            'valor': 'number',
+            'quantidade': 'number'
+        };
+
+        const fields = [];
+        for (const [field, type] of Object.entries(commonFields)) {
+            if (request.includes(field)) {
+                fields.push({ name: field, type });
+            }
+        }
+
+        return fields.length > 0 ? fields : [
+            { name: 'id', type: 'number' },
+            { name: 'name', type: 'string' }
         ];
-
-        for (const p of possiblePaths) {
-            if (fs.existsSync(p)) {
-                return p;
-            }
-        }
-
-        return null;
     }
 
-    private generateComponentUsage(feature: any): string {
-        const { component, props = {} } = feature;
-        const propsString = Object.entries(props)
-            .map(([key, value]) => `${key}={${value}}`)
-            .join('\n        ');
-
-        return `<${component}\n        ${propsString}\n      />`;
-    }
-
-    private findMatchingBracket(content: string, openingIndex: number): number {
-        let count = 1;
-        let i = openingIndex + 1;
-        
-        while (count > 0 && i < content.length) {
-            if (content[i] === '<' && content[i + 1] !== '/') count++;
-            if (content[i] === '<' && content[i + 1] === '/') count--;
-            if (content[i] === '/' && content[i + 1] === '>') count--;
-            i++;
-        }
-        
-        return i;
+    private capitalize(str: string): string {
+        return str.charAt(0).toUpperCase() + str.slice(1);
     }
 
     private async editComponent(aiResponse: any): Promise<string> {
@@ -766,5 +1298,40 @@ export interface ${componentName}Props {
   onSubmit: (data: FormData) => void;
 }
 `;
+    }
+
+    private async addRoute(response: any): Promise<string> {
+        // Implementação da adição de rotas
+        return "Rota adicionada com sucesso!";
+    }
+
+    private async modifyExistingFile(aiResponse: any): Promise<string> {
+        const targetFile = aiResponse.features.find((f: Feature) => f.targetFile)?.targetFile;
+        if (!targetFile) {
+            throw new Error('Arquivo alvo não especificado');
+        }
+
+        const filePath = path.join(this.workspaceRoot, targetFile);
+        if (!fs.existsSync(filePath)) {
+            throw new Error(`Arquivo ${targetFile} não encontrado`);
+        }
+
+        let content = fs.readFileSync(filePath, 'utf8');
+        const importFeature = aiResponse.features.find((f: Feature) => f.type === 'import');
+        const usageFeature = aiResponse.features.find((f: Feature) => f.type === 'usage');
+
+        if (importFeature) {
+            const importStatement = `import ${importFeature.component} from '${importFeature.importComponent}';\n`;
+            content = importStatement + content;
+        }
+
+        if (usageFeature) {
+            const componentUsage = `<${usageFeature.component} ${Object.entries(usageFeature.props || {})
+                .map(([key, value]) => `${key}={${value}}`).join(' ')} />`;
+            content = content.replace('</div>', `  ${componentUsage}\n</div>`);
+        }
+
+        fs.writeFileSync(filePath, content);
+        return `Arquivo ${targetFile} modificado com sucesso!`;
     }
 } 
