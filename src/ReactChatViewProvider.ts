@@ -1,8 +1,5 @@
 import * as vscode from 'vscode';
 import { ReactCodeGenerator } from './utils/codeGenerator';
-import * as path from 'path';
-import * as fs from 'fs';
-import { TemplateUtils } from './utils/templateUtils';
 
 interface ChatStats {
     totalMessages: number;
@@ -65,18 +62,18 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
             this.stats.totalMessages++;
             this.stats.commandsExecuted++;
             this.stats.lastModified = [fileName, ...this.stats.lastModified.slice(0, 4)];
-            
+
             await this._context.globalState.update(ReactChatViewProvider.CHAT_STATS_KEY, this.stats);
-            
+
             // Enviar atualização para o webview
             this.sendStatsUpdate();
         } else {
             this.stats.totalMessages++;
             this.stats.commandsExecuted++;
             this.stats.lastModified = [fileName, ...this.stats.lastModified.slice(0, 4)];
-            
+
             await this._context.globalState.update(ReactChatViewProvider.CHAT_STATS_KEY, this.stats);
-            
+
             // Enviar atualização para o webview
             this.sendStatsUpdate();
         }
@@ -91,7 +88,7 @@ export class ReactChatViewProvider implements vscode.WebviewViewProvider {
                 timestamp: Date.now(),
                 metadata: { stats: this.stats }
             });
-            
+
             this._webview.webview.postMessage({
                 type: 'statsUpdate',
                 stats: this.stats,
@@ -125,12 +122,12 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
             history.push(message);
             console.log('Salvando mensagem no histórico:', message.type);
             await this._context.globalState.update(ReactChatViewProvider.CHAT_HISTORY_KEY, history);
-            
+
             // Atualizar estatísticas se necessário
             if (message.type === 'stats') {
                 await this._context.globalState.update(ReactChatViewProvider.CHAT_STATS_KEY, message.metadata?.stats);
             }
-            
+
             // Enviar mensagem para o webview
             if (this._webview) {
                 this._webview.webview.postMessage({ type: 'newMessage', message });
@@ -157,7 +154,7 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
             console.log('Limpando histórico do chat');
             await this._context.globalState.update(ReactChatViewProvider.CHAT_HISTORY_KEY, []);
             await this._context.globalState.update(ReactChatViewProvider.CHAT_STATS_KEY, undefined);
-            
+
             if (this._webview) {
                 this._webview.webview.postMessage({ type: 'clearHistory' });
                 this.addSystemMessage('Histórico limpo com sucesso! 🧹');
@@ -169,15 +166,15 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
     }
 
     private async addSystemMessage(text: string, suggestions?: string[]) {
-        await this.saveMessage({ 
-            type: 'system', 
-            text, 
+        await this.saveMessage({
+            type: 'system',
+            text,
             timestamp: Date.now(),
             metadata: { suggestions }
         });
         if (this._webview) {
-            this._webview.webview.postMessage({ 
-                type: 'system', 
+            this._webview.webview.postMessage({
+                type: 'system',
                 text,
                 metadata: { suggestions }
             });
@@ -186,7 +183,7 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
 
     private getSuggestionsForContext(): string[] {
         const fileName = this.currentFile?.toLowerCase() || '';
-        
+
         if (fileName.includes('component')) {
             return [
                 "Adicione validação de props usando PropTypes",
@@ -195,7 +192,7 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                 "Otimize o performance com useMemo/useCallback"
             ];
         }
-        
+
         if (fileName.includes('service')) {
             return [
                 "Adicione tratamento de erros",
@@ -224,15 +221,15 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
 
     public async generateResponse(request: string): Promise<void> {
         try {
+            console.log('Iniciando geração de resposta para:', request);
+
             // Atualizar UI para mostrar que está processando
             this._webview?.webview.postMessage({ type: 'loading', show: true });
-            this._webview?.webview.postMessage({ type: 'thinking', text: 'Analisando sua solicitação...', metadata: { stage: 'analyzing' } });
-
-            // Adicionar mensagem do usuário
-            await this.saveMessage({ 
-                type: 'user', 
-                text: request,
-                timestamp: Date.now()
+            await this.saveMessage({
+                type: 'thinking',
+                text: 'Analisando sua solicitação...',
+                timestamp: Date.now(),
+                metadata: { stage: 'analyzing' }
             });
 
             // Processar a solicitação em etapas
@@ -243,21 +240,21 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
             ];
 
             for (const { stage, text } of stages) {
-                this._webview?.webview.postMessage({ type: 'thinking', text, metadata: { stage } });
+                console.log(`Estágio: ${stage} - ${text}`);
                 await this.saveMessage({
                     type: 'thinking',
                     text,
                     timestamp: Date.now(),
                     metadata: { stage }
                 });
-                
+
                 // Simular um pequeno delay para feedback visual
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
 
-            // Gerar a resposta
+            console.log('Chamando codeGenerator.generateComponent');
             const result = await this.codeGenerator.generateComponent(request);
-            const codeLanguage = result.toLowerCase().includes('typescript') ? 'typescript' : 'javascript';
+            console.log('Resultado gerado:', result);
 
             // Remover mensagens de "pensando"
             const history = await this.getChatHistory();
@@ -272,31 +269,22 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
                 metadata: {
                     action: 'generate',
                     componentType: 'react',
-                    codeLanguage,
+                    codeLanguage: result.toLowerCase().includes('typescript') ? 'typescript' : 'javascript',
                     stage: 'complete',
                     suggestions: this.getSuggestionsForContext()
                 }
             });
 
-            // Atualizar UI
-            this._webview?.webview.postMessage({
-                type: 'response',
-                text: result,
-                metadata: {
-                    action: 'generate',
-                    componentType: 'react',
-                    codeLanguage,
-                    stage: 'complete',
-                    suggestions: this.getSuggestionsForContext()
-                }
-            });
+            console.log('Resposta gerada e salva com sucesso');
 
         } catch (error) {
-            console.error('Erro ao gerar resposta:', error);
-            this._webview?.webview.postMessage({ type: 'error', text: `Erro ao processar sua solicitação: ${error instanceof Error ? error.message : 'Erro desconhecido'}` });
+            console.error('Erro detalhado ao gerar resposta:', error);
+            const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+            console.error('Mensagem de erro:', errorMessage);
+
             await this.saveMessage({
                 type: 'error',
-                text: `Erro ao processar sua solicitação: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+                text: `Erro ao processar sua solicitação: ${errorMessage}`,
                 timestamp: Date.now()
             });
         } finally {
@@ -307,21 +295,50 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
 
     public resolveWebviewView(webviewView: vscode.WebviewView): void {
         this._webview = webviewView;
+
         webviewView.webview.options = {
             enableScripts: true,
             localResourceRoots: [this._extensionUri]
         };
+
+        // Carregar histórico inicial
+        this.getChatHistory().then(history => {
+            webviewView.webview.postMessage({ type: 'loadHistory', history });
+        });
+
         webviewView.webview.html = this.getHtmlForWebview();
 
         // Configurar manipulador de mensagens
         webviewView.webview.onDidReceiveMessage(async (message) => {
-            switch (message.type) {
-                case 'input':
-                    await this.handleInput(message.text);
-                    break;
-                case 'clearHistory':
-                    await this.clearHistory();
-                    break;
+            console.log('Mensagem recebida do webview:', message);
+
+            try {
+                let history: ChatMessage[];
+
+                switch (message.type) {
+                    case 'input':
+                        console.log('Processando input:', message.text);
+                        await this.handleInput(message.text);
+                        break;
+                    case 'clearHistory':
+                        console.log('Limpando histórico');
+                        await this.clearHistory();
+                        break;
+                    case 'webviewReady':
+                        console.log('Webview pronto');
+                        // Carregar histórico quando o webview estiver pronto
+                        history = await this.getChatHistory();
+                        webviewView.webview.postMessage({ type: 'loadHistory', history });
+                        break;
+                    default:
+                        console.log('Tipo de mensagem não reconhecido:', message.type);
+                }
+            } catch (error) {
+                console.error('Erro ao processar mensagem do webview:', error);
+                webviewView.webview.postMessage({
+                    type: 'error',
+                    text: `Erro ao processar mensagem: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
+                });
             }
         });
     }
@@ -941,142 +958,44 @@ ${this.stats.lastModified.length > 0 ? '\n📝 Últimas Modificações:\n' + thi
     }
 
     private async handleInput(input: string): Promise<void> {
-        // Adicionar a mensagem do usuário ao histórico
-        this.messages.push({
-            type: 'user',
-            text: input,
-            timestamp: Date.now()
-        });
-
-        // Atualizar a visualização
-        this.updateWebview();
-
-        // Processar a mensagem
-        await this.handleMessage(input);
-
-        // Atualizar as estatísticas
-        this.updateStats('create', input);
-    }
-
-    private async handleMessage(message: string): Promise<void> {
         try {
-            // Adicionar mensagem de "pensando"
-            this.messages.push({
-                type: 'thinking',
-                text: 'Processando...',
+            // Adicionar mensagem do usuário ao histórico
+            await this.saveMessage({
+                type: 'user',
+                text: input,
                 timestamp: Date.now()
             });
+
+            // Atualizar a visualização
             this.updateWebview();
 
-            // Verificar se a mensagem é um comando
-            if (message.toLowerCase().startsWith('criar') || message.toLowerCase().startsWith('crie')) {
-                await this.handleCommand(message);
-                return;
+            // Mostrar indicador de loading
+            if (this._webview) {
+                this._webview.webview.postMessage({ type: 'loading', show: true });
             }
 
-            // Outras ações podem ser adicionadas aqui
-            this.messages.push({
+            // Gerar resposta
+            await this.generateResponse(input);
+
+            // Atualizar as estatísticas
+            await this.updateStats('create', input);
+        } catch (error) {
+            console.error('Erro ao processar input:', error);
+            await this.saveMessage({
                 type: 'error',
-                text: 'Não entendi o que você quer fazer. Por favor, use comandos como "criar componente".',
+                text: `Erro ao processar mensagem: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
                 timestamp: Date.now()
             });
             this.updateWebview();
-        } catch (err) {
-            const error = err as Error;
-            console.error('Erro ao processar mensagem:', error);
-            this.messages.push({
-                type: 'error',
-                text: `Erro ao processar mensagem: ${error.message}`,
-                timestamp: Date.now()
-            });
-            this.updateWebview();
-        }
-    }
-
-    private async handleCommand(command: string): Promise<void> {
-        const createComponentRegex = /^criar? (um )?componente/i;
-        
-        if (createComponentRegex.test(command)) {
-            await this.handleCreateComponent(command);
-            return;
-        }
-
-        // Outros comandos podem ser adicionados aqui
-        this.messages.push({
-            type: 'error',
-            text: 'Comando não reconhecido',
-            timestamp: Date.now()
-        });
-        this.updateWebview();
-    }
-
-    private async handleCreateComponent(request: string): Promise<void> {
-        try {
-            const isTypeScript = await this.isTypeScriptProject();
-            const template = TemplateUtils.generateComponent(request, isTypeScript);
-            const componentDir = path.join(this.workspaceRoot, 'src', 'components', template.name);
-            
-            await fs.promises.mkdir(componentDir, { recursive: true });
-
-            const files = [
-                {
-                    path: path.join(componentDir, `${template.name}.${isTypeScript ? 'tsx' : 'jsx'}`),
-                    content: template.component
-                },
-                {
-                    path: path.join(componentDir, `${template.name}.module.css`),
-                    content: template.styles
-                }
-            ];
-
-            if (template.types && isTypeScript) {
-                files.push({
-                    path: path.join(componentDir, `${template.name}.types.ts`),
-                    content: template.types
-                });
+        } finally {
+            if (this._webview) {
+                this._webview.webview.postMessage({ type: 'loading', show: false });
             }
-
-            await Promise.all(files.map(file => fs.promises.writeFile(file.path, file.content)));
-
-            this.messages.push({
-                type: 'system',
-                text: `Componente ${template.name} criado com sucesso!`,
-                timestamp: Date.now(),
-                metadata: {
-                    componentType: template.name,
-                    action: 'create',
-                    fileCreated: files.map(f => f.path).join(', ')
-                }
-            });
-            this.updateWebview();
-        } catch (err) {
-            const error = err as Error;
-            console.error('Erro ao criar componente:', error);
-            this.messages.push({
-                type: 'error',
-                text: `Erro ao criar componente: ${error.message}`,
-                timestamp: Date.now()
-            });
-            this.updateWebview();
         }
     }
 
-    private async isTypeScriptProject(): Promise<boolean> {
-        try {
-            const tsConfigPath = path.join(this.workspaceRoot, 'tsconfig.json');
-            await fs.promises.access(tsConfigPath);
-            return true;
-        } catch {
-            return false;
-        }
-    }
 
-    private showMessage(message: string): void {
-        vscode.window.showInformationMessage(message);
-    }
 
-    private showError(message: string): void {
-        vscode.window.showErrorMessage(message);
-    }
+
 
 }

@@ -1,12 +1,20 @@
 import OpenAI from 'openai';
 import { AIResponse } from '../templates/types';
+import * as vscode from 'vscode';
 
 export class AIHelper {
     private openai!: OpenAI;
 
     constructor() {
+        const config = vscode.workspace.getConfiguration('reactChat');
+        const apiKey = config.get<string>('openaiApiKey');
+        
+        if (!apiKey) {
+            throw new Error('OpenAI API Key não encontrada. Por favor, configure a chave em suas configurações do VS Code (reactChat.openaiApiKey)');
+        }
+
         this.openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY
+            apiKey: apiKey
         });
     }
 

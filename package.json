@@ -29,6 +29,16 @@
                     "name": "React Chat"
                 }
             ]
+        },
+        "configuration": {
+            "title": "React Chat",
+            "properties": {
+                "reactChat.openaiApiKey": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Chave da API do OpenAI para o assistente React"
+                }
+            }
         }
     },
     "scripts": {
