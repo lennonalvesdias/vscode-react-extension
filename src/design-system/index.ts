@@ -7,6 +7,4 @@ export * from './tokens/typography';
 export * from './styles/base';
 
 // Components
-export * from './components/Button';
-export * from './components/Message';
 export * from './components/Input'; 

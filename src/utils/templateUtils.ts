@@ -1,4 +1,4 @@
-import { TemplateConfig } from '../templates/types';
+import { TemplateConfig, Feature, Field, ServiceConfig, ComponentTemplate } from '../templates/types';
 import * as Handlebars from 'handlebars';
 
 interface Template {
@@ -8,15 +8,6 @@ interface Template {
 }
 
 export class TemplateUtils {
-    private static commonFields: { [key: string]: { type: string; validation: string[] } } = {
-        email: { type: 'string', validation: ['required', 'email'] },
-        senha: { type: 'string', validation: ['required', 'minLength:8'] },
-        nome: { type: 'string', validation: ['required'] },
-        telefone: { type: 'string', validation: ['required', 'phone'] },
-        data: { type: 'date', validation: ['required'] },
-        valor: { type: 'number', validation: ['required', 'min:0'] },
-        quantidade: { type: 'number', validation: ['required', 'min:0'] }
-    };
 
     public static inferComponentName(request: string): string {
         const requestLower = request.toLowerCase();
@@ -24,9 +15,9 @@ export class TemplateUtils {
         // Mapear palavras-chave para nomes de componentes
         const componentNameMap: Record<string, string> = {
             'login': 'Login',
-            'autenticação': 'Auth',
+            'autenticacao': 'Auth',
             'registro': 'Register',
-            'cadastro de usuário': 'UserRegistration',
+            'cadastroUsuario': 'UserRegistration',
             'tabela': 'Table',
             'lista': 'List',
             'listagem': 'List',
@@ -62,7 +53,7 @@ export class TemplateUtils {
     }
 
     private static inferComponentType(request: string): 'auth' | 'table' | 'form' {
-        const authKeywords = ['login', 'auth', 'autenticação', 'registro', 'cadastro de usuário'];
+        const authKeywords = ['login', 'auth', 'autenticacao', 'registro', 'cadastroUsuario'];
         const tableKeywords = ['tabela', 'lista', 'listagem', 'grid', 'dados'];
         const formKeywords = ['formulário', 'form', 'cadastro', 'edição', 'registro'];
 
@@ -199,9 +190,9 @@ export class TemplateUtils {
             'cep': { type: 'string' },
             'status': { type: 'string' },
             'id': { type: 'number' },
-            'código': { type: 'string' },
-            'data de criação': { type: 'string' },
-            'data de atualização': { type: 'string' }
+            'codigo': { type: 'string' },
+            'dataCriacao': { type: 'string' },
+            'dataAtualizacao': { type: 'string' }
         };
 
         // Procurar por campos conhecidos no request
@@ -225,7 +216,7 @@ export class TemplateUtils {
                 );
             } else if (requestLower.includes('produto')) {
                 fields.push(
-                    { name: 'código', type: 'string' },
+                    { name: 'codigo', type: 'string' },
                     { name: 'nome', type: 'string' },
                     { name: 'valor', type: 'number' },
                     { name: 'quantidade', type: 'number' }
@@ -241,7 +232,7 @@ export class TemplateUtils {
                 fields.push(
                     { name: 'id', type: 'number' },
                     { name: 'nome', type: 'string' },
-                    { name: 'data de criação', type: 'string' }
+                    { name: 'dataCriacao', type: 'string' }
                 );
             }
         }
@@ -249,9 +240,10 @@ export class TemplateUtils {
         return fields;
     }
 
-    public static getTemplate(config: TemplateConfig): Template {
+    public static getTemplate(config: TemplateConfig): ComponentTemplate {
         const template = this.getBaseTemplate(config);
         return {
+            name: config.name,
             component: this.compileTemplate(template.component, config),
             styles: this.compileTemplate(template.styles, config),
             service: template.service ? this.compileTemplate(template.service, config) : undefined
@@ -681,12 +673,6 @@ export default {{name}};`;
 }`; 
     }
 
-    private static toPascalCase(str: string): string {
-        return str
-            .split(/[^a-zA-Z0-9]+/)
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-            .join('');
-    }
 
     private static extractServices(request: string, componentType: string): ServiceConfig[] {
         const services: ServiceConfig[] = [];

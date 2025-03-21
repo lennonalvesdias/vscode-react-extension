@@ -1,4 +1,5 @@
-export const tableStyles = `.container {
+export const tableStyles = `
+.container {
     width: 100%;
     overflow-x: auto;
 }
@@ -35,3 +36,4 @@ export const tableStyles = `.container {
 tr:hover {
     background-color: var(--vscode-list-hoverBackground);
 } 
+` 

@@ -1,7 +1,7 @@
 export interface TemplateConfig {
     name: string;
     type: 'auth' | 'table' | 'form';
-    features: string[];
+    features: Feature[];
     isTypeScript: boolean;
 }
 
@@ -10,13 +10,13 @@ export interface AIResponse {
     oldName?: string;
     newName: string;
     componentType: 'auth' | 'table' | 'form' | 'page';
-    features: string[];
+    features: Feature[];
 }
 
 export interface Feature {
-    name: string;
-    description: string;
-    code: string;
+    type: 'auth' | 'table' | 'form' | 'pagination' | 'filters' | 'search' | 'sorting';
+    fields?: Field[];
+    services?: ServiceConfig[];
 }
 
 export interface Field {
@@ -27,7 +27,7 @@ export interface Field {
 
 export interface ValidationRule {
     type: 'required' | 'email' | 'minLength' | 'maxLength' | 'pattern' | 'custom';
-    value?: any;
+    value?: string | number | RegExp;
     message: string;
 }
 
