@@ -1,64 +1,75 @@
-# React Chat
+# Arsenal-Soma Code Generator
 
-Uma extensão do VS Code que fornece um assistente de desenvolvimento React com chat. O assistente pode ajudar você a criar componentes, serviços e outros arquivos React com base em suas solicitações em linguagem natural.
+Uma extensão do Visual Studio Code que gera código React baseado no design system Soma e framework Arsenal.
 
-## Recursos
+## Funcionalidades
 
-- Criação de componentes React com TypeScript ou JavaScript
-- Suporte para diferentes tipos de componentes:
-  - Formulários com validação
-  - Tabelas com paginação, busca, filtros e ordenação
-  - Páginas de autenticação
-- Geração automática de:
-  - Arquivos de estilo (CSS Modules)
-  - Arquivos de tipos (TypeScript)
-  - Serviços e endpoints
+- Geração de componentes React com TypeScript
+- Integração com OpenAI para geração inteligente de código
 - Interface de chat intuitiva
-- Suporte para comandos em português
-
-## Uso
-
-1. Abra a aba "React Chat" na barra lateral do VS Code
-2. Digite sua solicitação em português, por exemplo:
-   - "Criar um componente de tabela de usuários com paginação e busca"
-   - "Criar um formulário de cadastro de produtos"
-   - "Criar uma página de login"
-3. O assistente irá gerar os arquivos necessários com base na sua solicitação
-
-## Exemplos de Comandos
-
-- `criar componente de tabela de usuários com paginação e busca`
-- `criar formulário de cadastro de produtos com validação`
-- `criar página de login com autenticação`
-- `criar componente de lista de pedidos com filtros e ordenação`
+- Suporte a templates personalizados
+- Geração de testes unitários
+- Documentação automática
 
 ## Requisitos
 
-- VS Code 1.85.0 ou superior
-- Node.js e npm instalados
-- Projeto React existente (TypeScript ou JavaScript)
+- Visual Studio Code 1.60.0 ou superior
+- Node.js 14.x ou superior
+- API Key da OpenAI
 
 ## Instalação
 
-1. Abra o VS Code
-2. Vá para a aba de extensões (Ctrl+Shift+X)
-3. Pesquise por "React Chat"
-4. Clique em "Instalar"
+1. Clone o repositório:
+```bash
+git clone https://github.com/seu-usuario/arsenal-soma-code-generator.git
+```
+
+2. Instale as dependências:
+```bash
+npm install
+```
+
+3. Compile o projeto:
+```bash
+npm run compile
+```
+
+4. Pressione F5 no VSCode para iniciar a extensão em modo de desenvolvimento
 
 ## Configuração
 
-A extensão detecta automaticamente se seu projeto usa TypeScript ou JavaScript e gera os arquivos no formato apropriado.
+1. Abra as configurações do VSCode (Ctrl+,)
+2. Procure por "Arsenal-Soma"
+3. Configure sua API Key da OpenAI
 
-## Contribuição
+## Uso
 
-Contribuições são bem-vindas! Por favor, siga estas etapas:
+1. Abra o painel do chat clicando no ícone do Arsenal-Soma na barra de atividades
+2. Digite sua solicitação de geração de código
+3. Aguarde a geração do componente
+4. Os arquivos serão criados automaticamente no seu projeto
 
-1. Fork o repositório
-2. Crie uma branch para sua feature (`git checkout -b feature/MinhaFeature`)
-3. Faça commit das suas mudanças (`git commit -am 'Adiciona nova feature'`)
-4. Push para a branch (`git push origin feature/MinhaFeature`)
-5. Crie um Pull Request
+## Exemplos
+
+Para gerar um componente de login:
+```
+gere uma página de login com usuário e senha com uma service que se integre a uma api pra validar o login e setar o local storage com o usuário autenticado
+```
+
+## Desenvolvimento
+
+- `npm run compile` - Compila o projeto
+- `npm run watch` - Compila o projeto em modo watch
+- `npm run lint` - Executa o linter
+
+## Contribuindo
+
+1. Faça um fork do projeto
+2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
+3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
+4. Push para a branch (`git push origin feature/AmazingFeature`)
+5. Abra um Pull Request
 
 ## Licença
 
-MIT 
+Este projeto está licenciado sob a licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.

@@ -1,42 +1,54 @@
 {
-    "name": "vscode-react-chat",
-    "displayName": "React Chat",
-    "description": "Assistente de desenvolvimento React com chat",
+    "name": "arsenal-soma-code-generator",
+    "displayName": "Arsenal-Soma Code Generator",
+    "description": "Gera código baseado no design system Soma e framework Arsenal.",
     "version": "0.0.1",
     "engines": {
-        "vscode": "^1.85.0"
+        "vscode": "^1.60.0"
     },
     "categories": [
         "Other"
     ],
-    "activationEvents": [],
+    "activationEvents": [
+        "*",
+        "onView:arsenalSomaChat",
+        "onCommand:arsenalSoma.openChat"
+    ],
     "main": "./out/extension.js",
     "contributes": {
+        "commands": [
+            {
+                "command": "arsenalSoma.openChat",
+                "title": "Abrir Arsenal-Soma Chat",
+                "category": "Arsenal-Soma"
+            }
+        ],
         "viewsContainers": {
             "activitybar": [
                 {
-                    "id": "reactChat",
-                    "title": "React Chat",
-                    "icon": "resources/icon.svg"
+                    "id": "arsenal-soma",
+                    "title": "Arsenal-Soma",
+                    "icon": "resources/chat.svg"
                 }
             ]
         },
         "views": {
-            "reactChat": [
+            "arsenal-soma": [
                 {
+                    "id": "arsenalSomaChat",
+                    "name": "Chat",
                     "type": "webview",
-                    "id": "reactChatView",
-                    "name": "React Chat"
+                    "visibility": "visible"
                 }
             ]
         },
         "configuration": {
-            "title": "React Chat",
+            "title": "Arsenal-Soma",
             "properties": {
-                "reactChat.openaiApiKey": {
+                "arsenalSoma.openaiApiKey": {
                     "type": "string",
-                    "default": "",
-                    "description": "Chave da API do OpenAI para o assistente React"
+                    "description": "API Key da OpenAI para geração de código",
+                    "scope": "application"
                 }
             }
         }
@@ -45,30 +57,17 @@
         "vscode:prepublish": "npm run compile",
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
-        "pretest": "npm run compile && npm run lint",
-        "lint": "eslint src --ext ts",
-        "test": "node ./out/test/runTest.js",
-        "format": "prettier --write \"src/**/*.{ts,tsx}\"",
-        "package": "vsce package",
-        "publish": "vsce publish"
-    },
-    "devDependencies": {
-        "@types/glob": "^8.1.0",
-        "@types/mocha": "^10.0.6",
-        "@types/node": "20.x",
-        "@types/vscode": "^1.85.0",
-        "@typescript-eslint/eslint-plugin": "^6.15.0",
-        "@typescript-eslint/parser": "^6.15.0",
-        "@vscode/test-electron": "^2.3.8",
-        "eslint": "^8.56.0",
-        "glob": "^10.3.10",
-        "mocha": "^10.2.0",
-        "prettier": "^3.1.1",
-        "typescript": "^5.3.3",
-        "vsce": "^2.15.0"
+        "lint": "eslint src --ext ts"
     },
     "dependencies": {
-        "handlebars": "^4.7.8",
-        "openai": "^4.20.1"
+        "axios": "^1.6.7"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.0",
+        "@types/vscode": "^1.60.0",
+        "@typescript-eslint/eslint-plugin": "^7.1.0",
+        "@typescript-eslint/parser": "^7.1.0",
+        "eslint": "^8.57.0",
+        "typescript": "^5.3.3"
     }
 }

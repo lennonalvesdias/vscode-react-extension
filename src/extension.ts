@@ -1,15 +1,17 @@
 import * as vscode from 'vscode';
-import { ReactChatViewProvider } from './ReactChatViewProvider';
+import { EXTENSION_NAME, VIEW_TYPE } from './configuration';
+import { ChatViewProvider } from './webview/ChatViewProvider';
 
 export function activate(context: vscode.ExtensionContext) {
-    const provider = new ReactChatViewProvider(context, context.extensionUri);
-    
+    console.log(`Extensão "${EXTENSION_NAME}" ativada.`);
+
+    // Registra o provedor de visualização do chat
+    const provider = new ChatViewProvider(context.extensionUri);
     context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider(
-            ReactChatViewProvider.viewType,
-            provider
-        )
+        vscode.window.registerWebviewViewProvider(VIEW_TYPE, provider)
     );
 }
 
-export function deactivate() { } 
+export function deactivate() {
+    console.log(`Extensão "${EXTENSION_NAME}" desativada.`);
+}
