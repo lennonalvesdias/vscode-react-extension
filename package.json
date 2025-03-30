@@ -10,7 +10,7 @@
         "Other"
     ],
     "activationEvents": [
-        "*",
+        "onStartupFinished",
         "onView:arsenalSomaChat",
         "onCommand:arsenalSoma.openChat"
     ],

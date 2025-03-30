@@ -6,7 +6,7 @@ export const VIEW_CONTAINER_ID = 'arsenal-soma';
 
 // Configurações da OpenAI
 export const OPENAI_CONFIG = {
-    MODEL: 'gpt-4o',
+    MODEL: 'gpt-4',
     TEMPERATURE: 0.7,
     MAX_TOKENS: 2000
 };

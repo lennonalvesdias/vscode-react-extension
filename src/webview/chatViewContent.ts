@@ -17,7 +17,9 @@ export function getWebviewContent(
         </head>
         <body>
             <div class="chat-container">
-                <div id="messages" class="messages"></div>
+                <div id="messages" class="messages">
+                    <div class="message system">Bem-vindo ao Arsenal-Soma Chat! Digite sua solicitação para gerar um componente React.</div>
+                </div>
                 <div class="input-container">
                     <input type="text" id="messageInput" placeholder="Digite sua mensagem...">
                     <button id="sendButton">Enviar</button>
