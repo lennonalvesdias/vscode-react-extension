@@ -49,14 +49,21 @@ export function activate(context: vscode.ExtensionContext) {
   // Registra o provedor da view do chat
   const chatViewProvider = new ChatViewProvider(context.extensionUri, context);
 
-  // Registra o provedor de webview
+  // Registra o provedor de webview para a view principal
   const chatViewRegistration = vscode.window.registerWebviewViewProvider(
     'psCopilot.chatView',
     chatViewProvider,
     { webviewOptions: { retainContextWhenHidden: true } }
   );
 
-  context.subscriptions.push(chatViewRegistration);
+  // Registra o mesmo provedor para a view do explorer
+  const explorerChatViewRegistration = vscode.window.registerWebviewViewProvider(
+    'psCopilot.explorerChatView',
+    chatViewProvider,
+    { webviewOptions: { retainContextWhenHidden: true } }
+  );
+
+  context.subscriptions.push(chatViewRegistration, explorerChatViewRegistration);
 
   // Registra o comando para abrir o chat
   const openChatCommand = vscode.commands.registerCommand('psCopilot.openChat', () => {
@@ -65,6 +72,15 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   context.subscriptions.push(openChatCommand);
+
+  // Registra o comando para abrir o chat no Explorer
+  const openChatInExplorerCommand = vscode.commands.registerCommand('psCopilot.openChatInExplorer', () => {
+    console.log('Comando psCopilot.openChatInExplorer executado');
+    // Abre a view no Explorer
+    vscode.commands.executeCommand('psCopilot.explorerChatView.focus');
+  });
+
+  context.subscriptions.push(openChatInExplorerCommand);
 
   // Registra os outros comandos
   registerManageAgentsCommand(context);

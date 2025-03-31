@@ -10,7 +10,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:psCopilot.chatView"
+    "onView:psCopilot.chatView",
+    "onView:psCopilot.explorerChatView"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -18,6 +19,10 @@
       {
         "command": "psCopilot.openChat",
         "title": "Abrir PS Copilot Chat"
+      },
+      {
+        "command": "psCopilot.openChatInExplorer",
+        "title": "Abrir PS Copilot Chat no Explorer"
       },
       {
         "command": "psCopilot.manageAgents",
@@ -53,7 +58,7 @@
       ],
       "explorer": [
         {
-          "id": "psCopilot.chatView",
+          "id": "psCopilot.explorerChatView",
           "name": "PS Copilot Chat"
         }
       ]
