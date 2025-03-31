@@ -1,4 +1,4 @@
-import { Agent, AgentMessage, AgentContext, AnalysisResult, DesignSystemCompliance } from './types';
+import { Agent, AgentMessage, AgentContext } from './types';
 import { OpenAIService } from '../services/OpenAIService';
 
 export class DesignAgent implements Agent {

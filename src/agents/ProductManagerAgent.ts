@@ -1,15 +1,11 @@
-import * as vscode from 'vscode';
-import { Agent, AgentMessage, AgentContext, AnalysisResult, BusinessAlignment } from './types';
+import { Agent, AgentMessage, AgentContext } from './types';
 import { OpenAIService } from '../services/OpenAIService';
-import { BusinessAnalysisService } from '../services/BusinessAnalysisService';
 
 export class ProductManagerAgent implements Agent {
   private openAIService: OpenAIService;
-  private businessAnalysisService: BusinessAnalysisService;
 
   constructor(private context: AgentContext) {
     this.openAIService = new OpenAIService(context);
-    this.businessAnalysisService = new BusinessAnalysisService(context);
   }
 
   get name(): string {
