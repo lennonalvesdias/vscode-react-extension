@@ -42,6 +42,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     );
   }
 
+  public async provideViewData(): Promise<any> {
+    return {
+      messages: [],
+      agents: [],
+      settings: {
+        model: 'gpt-3.5-turbo',
+        temperature: 0.7,
+        maxTokens: 2000
+      }
+    };
+  }
+
   private async _processMessage(text: string): Promise<string> {
     // TODO: Implementar integração com os agentes
     return 'Mensagem recebida: ' + text;
@@ -56,11 +68,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'unsafe-eval' 'unsafe-inline';">
           <title>PS Copilot Chat</title>
           <link rel="stylesheet" href="${styleUri}">
         </head>
         <body>
-          <div id="root"></div>
+          <div id="root">
+            <div class="chat-container">
+              <div class="messages" id="messages"></div>
+              <div class="input-container">
+                <textarea id="messageInput" placeholder="Digite sua mensagem..."></textarea>
+                <button id="sendButton">Enviar</button>
+              </div>
+            </div>
+          </div>
           <script src="${scriptUri}"></script>
         </body>
       </html>`;

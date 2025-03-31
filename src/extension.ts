@@ -10,12 +10,17 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       'psCopilot.chatView',
-      chatViewProvider
+      chatViewProvider,
+      {
+        webviewOptions: {
+          retainContextWhenHidden: true
+        }
+      }
     )
   );
 
   const openChatCommand = vscode.commands.registerCommand('psCopilot.openChat', () => {
-    vscode.commands.executeCommand('workbench.view.extension.ps-copilot');
+    vscode.commands.executeCommand('workbench.view.extension.psCopilot');
   });
 
   context.subscriptions.push(openChatCommand);
@@ -24,5 +29,3 @@ export function activate(context: vscode.ExtensionContext) {
   registerConfigureApiKeyCommand(context);
   registerSelectLLMModelCommand(context);
 }
-
-export function deactivate() { }
