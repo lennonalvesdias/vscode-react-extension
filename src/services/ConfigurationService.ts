@@ -24,11 +24,17 @@ export class ConfigurationService {
 
   async setApiKey(apiKey: string): Promise<void> {
     try {
-      // Sanitiza a API Key
-      const sanitizedKey = this.securityService.sanitizeInput(apiKey);
+      // Valida a API Key
+      if (!apiKey.trim()) {
+        throw new Error('API Key não pode estar vazia');
+      }
+
+      if (!apiKey.startsWith('sk-')) {
+        throw new Error('API Key deve começar com "sk-"');
+      }
 
       // Armazena a API Key de forma segura
-      await this.securityService.secureStore(this.API_KEY_KEY, sanitizedKey);
+      await this.securityService.secureStore(this.API_KEY_KEY, apiKey);
 
       // Registra a ação no log de auditoria
       this.securityService.logAudit('setApiKey', {
@@ -48,34 +54,11 @@ export class ConfigurationService {
   }
 
   async getApiKey(): Promise<string | undefined> {
-    try {
-      return await this.securityService.secureRetrieve(this.API_KEY_KEY);
-    } catch (error) {
-      this.securityService.logAudit('getApiKey', {
-        success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
-        timestamp: new Date().toISOString()
-      });
-      throw new Error(`Erro ao recuperar API Key: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
-    }
+    return this.securityService.secureRetrieve(this.API_KEY_KEY);
   }
 
   async deleteApiKey(): Promise<void> {
-    try {
-      await this.securityService.secureDelete(this.API_KEY_KEY);
-      this.securityService.logAudit('deleteApiKey', {
-        success: true,
-        timestamp: new Date().toISOString()
-      });
-      vscode.window.showInformationMessage('API Key removida com sucesso!');
-    } catch (error) {
-      this.securityService.logAudit('deleteApiKey', {
-        success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
-        timestamp: new Date().toISOString()
-      });
-      throw new Error(`Erro ao remover API Key: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
-    }
+    await this.securityService.secureDelete(this.API_KEY_KEY);
   }
 
   async hasApiKey(): Promise<boolean> {

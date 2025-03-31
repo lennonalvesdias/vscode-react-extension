@@ -24,7 +24,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         switch (message.command) {
           case 'sendMessage':
             try {
-              // TODO: Implementar integração com os agentes
               const response = await this._processMessage(message.text);
               webviewView.webview.postMessage({
                 command: 'receiveMessage',
@@ -55,7 +54,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async _processMessage(text: string): Promise<string> {
-    // TODO: Implementar integração com os agentes
     return 'Mensagem recebida: ' + text;
   }
 
@@ -73,15 +71,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <link rel="stylesheet" href="${styleUri}">
         </head>
         <body>
-          <div id="root">
-            <div class="chat-container">
-              <div class="messages" id="messages"></div>
-              <div class="input-container">
-                <textarea id="messageInput" placeholder="Digite sua mensagem..."></textarea>
-                <button id="sendButton">Enviar</button>
-              </div>
-            </div>
-          </div>
+          <div id="root"></div>
           <script src="${scriptUri}"></script>
         </body>
       </html>`;

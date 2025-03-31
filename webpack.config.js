@@ -15,7 +15,10 @@ module.exports = {
     vscode: 'commonjs vscode'
   },
   resolve: {
-    extensions: ['.ts', '.tsx', '.js', '.jsx']
+    extensions: ['.ts', '.tsx', '.js', '.jsx'],
+    fallback: {
+      crypto: false
+    }
   },
   module: {
     rules: [
