@@ -33,10 +33,15 @@ export function registerManageAgentsCommand(context: vscode.ExtensionContext) {
       });
 
       if (selectedItems) {
-        for (const item of selectedItems) {
-          const currentState = agentManager.getAgentState(item.label);
-          agentManager.setAgentState(item.label, !currentState);
+        // Obtém os nomes dos agentes selecionados
+        const selectedAgentNames = selectedItems.map(item => item.label);
+
+        // Atualiza o estado de cada agente
+        for (const state of agentStates) {
+          const isSelected = selectedAgentNames.includes(state.name);
+          agentManager.setAgentState(state.name, isSelected);
         }
+
         vscode.window.showInformationMessage('Estado dos agentes atualizado com sucesso!');
       }
     } catch (error) {

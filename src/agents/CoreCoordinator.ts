@@ -12,25 +12,50 @@ export class CoreCoordinator {
   private agents: Array<{
     agent: any;
     isEnabled: boolean;
+    key: string;
   }>;
+  private context: AgentContext;
 
   constructor(context: AgentContext) {
+    this.context = context;
+
+    // Definição inicial dos agentes com suas chaves
     this.agents = [
-      { agent: new DeveloperAgent(context), isEnabled: true },
-      { agent: new DesignAgent(context), isEnabled: true },
-      { agent: new ProductManagerAgent(context), isEnabled: true },
-      { agent: new TestAgent(context), isEnabled: true },
-      { agent: new ArchitectureAgent(context), isEnabled: true },
-      { agent: new PerformanceAgent(context), isEnabled: true },
-      { agent: new SecurityAgent(context), isEnabled: true },
-      { agent: new AccessibilityAgent(context), isEnabled: true }
+      { agent: new DeveloperAgent(context), isEnabled: true, key: 'developer' },
+      { agent: new DesignAgent(context), isEnabled: true, key: 'design' },
+      { agent: new ProductManagerAgent(context), isEnabled: true, key: 'product' },
+      { agent: new TestAgent(context), isEnabled: true, key: 'test' },
+      { agent: new ArchitectureAgent(context), isEnabled: true, key: 'architecture' },
+      { agent: new PerformanceAgent(context), isEnabled: true, key: 'performance' },
+      { agent: new SecurityAgent(context), isEnabled: true, key: 'security' },
+      { agent: new AccessibilityAgent(context), isEnabled: true, key: 'accessibility' }
     ];
+
+    // Carrega o estado dos agentes do globalState
+    this.loadAgentStates();
+  }
+
+  private loadAgentStates() {
+    const savedStates = this.context.globalState.get<Record<string, boolean>>('agentStates');
+    if (savedStates) {
+      // Atualiza o estado dos agentes com os valores salvos
+      for (const agent of this.agents) {
+        if (agent.key in savedStates) {
+          agent.isEnabled = savedStates[agent.key];
+        }
+      }
+    }
   }
 
   public setAgentState(agentName: string, isEnabled: boolean): void {
     const agent = this.agents.find(a => a.agent.name === agentName);
     if (agent) {
       agent.isEnabled = isEnabled;
+
+      // Salva o estado atualizado no globalState
+      const savedStates = this.context.globalState.get<Record<string, boolean>>('agentStates') || {};
+      savedStates[agent.key] = isEnabled;
+      this.context.globalState.update('agentStates', savedStates);
     }
   }
 
