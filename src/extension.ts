@@ -6,6 +6,10 @@ import { registerSelectLLMModelCommand } from './commands/selectLLMModel';
 import { ConfigurationService } from './services/ConfigurationService';
 import { AgentContext } from './agents/types';
 
+// API Key configurada com sucesso - emitir evento
+const apiKeyConfigEvent = new vscode.EventEmitter<void>();
+export const onApiKeyConfigured = apiKeyConfigEvent.event;
+
 export function activate(context: vscode.ExtensionContext) {
   console.log('Ativando a extensão PS Copilot');
 
@@ -35,8 +39,22 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     if (apiKey) {
-      // Usa o método principal setApiKey que implementa validação e segurança
-      await configService.setApiKey(apiKey);
+      try {
+        // Usa o método principal setApiKey que implementa validação e segurança
+        await configService.setApiKey(apiKey);
+
+        // Emite evento para notificar componentes que a API Key foi configurada
+        apiKeyConfigEvent.fire();
+
+        // Sucesso - mostrar mensagem positiva
+        vscode.window.showInformationMessage('API Key da OpenAI configurada com sucesso! O chat está pronto para uso.', 'Abrir Chat').then(selection => {
+          if (selection === 'Abrir Chat') {
+            vscode.commands.executeCommand('psCopilot.openChat');
+          }
+        });
+      } catch (error) {
+        vscode.window.showErrorMessage(`Erro ao configurar API Key: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      }
     }
   });
 

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { OpenAIService } from '../services/OpenAIService';
 import { AgentContext } from '../agents/types';
 import { ConfigurationService } from '../services/ConfigurationService';
+import { onApiKeyConfigured } from '../extension';
 
 interface ChatMessage {
   text: string;
@@ -63,6 +64,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         });
       }
     });
+
+    // Escutar eventos de configuração da API Key
+    onApiKeyConfigured(() => {
+      // Recarregar a API Key
+      this._loadApiKey();
+
+      // Atualizar a interface para refletir que a API Key foi configurada
+      this._updateWebview();
+
+      // Adicionar mensagem informativa
+      this._messages.push({
+        text: 'API Key configurada com sucesso! Agora você pode começar a fazer perguntas.',
+        sender: 'assistant',
+        timestamp: new Date()
+      });
+
+      // Atualizar a interface novamente para mostrar a nova mensagem
+      this._updateWebview();
+    });
   }
 
   private async _loadApiKey() {
@@ -76,7 +96,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  public resolveWebviewView(
+  public async resolveWebviewView(
     webviewView: vscode.WebviewView,
     _context: vscode.WebviewViewResolveContext,
     _token: vscode.CancellationToken,
@@ -92,7 +112,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     webviewView.description = "Assistente com múltiplos agentes";
 
     // Renderize o HTML da view
-    this._updateWebview();
+    await this._updateWebview();
 
     webviewView.webview.onDidReceiveMessage(
       async message => {
@@ -110,11 +130,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               this._messages.push(userMessage);
 
               // Atualiza o HTML para mostrar a mensagem do usuário
-              this._updateWebview();
+              await this._updateWebview();
 
               // Define o estado como processando
               this._isProcessing = true;
-              this._updateWebview();
+              await this._updateWebview();
 
               // Processa a mensagem
               const response = await this._processMessage(message.text);
@@ -131,23 +151,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               this._isProcessing = false;
 
               // Atualiza o HTML do webview
-              this._updateWebview();
+              await this._updateWebview();
             } catch (error) {
               this._isProcessing = false;
               vscode.window.showErrorMessage('Erro ao processar mensagem: ' + error);
-              this._updateWebview();
+              await this._updateWebview();
             }
             break;
           case 'clearChat':
             this._messages = [];
-            this._updateWebview();
+            await this._updateWebview();
             break;
           case 'changeModel':
             this._selectedModel = message.model;
             this._context.globalState.update('selectedModel', this._selectedModel);
             this._openAIService.setModel(this._selectedModel);
             vscode.window.showInformationMessage(`Modelo alterado para: ${this._selectedModel}`);
-            this._updateWebview();
+            await this._updateWebview();
             break;
           case 'configApiKey':
             vscode.commands.executeCommand('psCopilot.configureApiKey');
@@ -196,13 +216,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private _updateWebview() {
+  private async _updateWebview() {
     if (this._view) {
-      this._view.webview.html = this._getHtmlForWebview();
+      const html = await this._getHtmlForWebview();
+      this._view.webview.html = html;
     }
   }
 
-  private _getHtmlForWebview() {
+  private async _getHtmlForWebview() {
     // Estilos CSS para o chat (inspirado no GitHub Copilot)
     const styleContent = `
       :root {
@@ -446,6 +467,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
     `;
 
+    // Verifica se a API Key está configurada
+    const hasApiKey = await this._configService.hasApiKey();
+
     // Renderiza as mensagens
     let messagesHtml = '';
 
@@ -457,9 +481,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             Assistente de desenvolvimento React com múltiplos agentes especializados.<br>
             Faça perguntas sobre desenvolvimento, design, arquitetura ou testes.
           </p>
+          ${!hasApiKey ? `
           <div class="empty-state-actions">
             <button id="configApiKeyBtn" class="action-button">Configurar API Key</button>
           </div>
+          ` : ''}
         </div>
       `;
     } else {
