@@ -99,8 +99,21 @@ export class SecurityService {
   }
 
   sanitizeInput(input: string): string {
-    // Remove caracteres potencialmente perigosos
-    return input.replace(/[<>]/g, '');
+    // Remove espaços em branco no início e fim
+    const trimmedInput = input.trim();
+
+    // Verifica se a API Key está vazia
+    if (!trimmedInput) {
+      throw new Error('API Key não pode estar vazia');
+    }
+
+    // Verifica se a API Key começa com 'sk-' ou 'org-'
+    if (!trimmedInput.startsWith('sk-') && !trimmedInput.startsWith('org-')) {
+      throw new Error('API Key deve começar com "sk-" ou "org-"');
+    }
+
+    // Remove apenas caracteres que não são permitidos em uma API Key
+    return trimmedInput.replace(/[^a-zA-Z0-9\-_.]/g, '');
   }
 
   validateCode(code: string): boolean {
