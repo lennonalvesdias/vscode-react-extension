@@ -10,9 +10,6 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:psCopilot.openChat",
-    "onCommand:psCopilot.manageAgents",
-    "onCommand:psCopilot.configureApiKey",
     "onView:psCopilot.chatView"
   ],
   "main": "./out/extension.js",
@@ -43,20 +40,25 @@
     "views": {
       "psCopilot": [
         {
+          "type": "webview",
           "id": "psCopilot.chatView",
-          "name": "Chat"
+          "name": "Chat",
+          "icon": "media/icon.svg",
+          "contextualTitle": "PS Copilot Chat"
         }
       ]
     },
     "menus": {
       "view/title": [
         {
-          "command": "psCopilot.openChat",
-          "when": "view == psCopilot.chatView"
+          "command": "psCopilot.manageAgents",
+          "when": "view == psCopilot.chatView",
+          "group": "navigation"
         },
         {
-          "command": "psCopilot.manageAgents",
-          "when": "view == psCopilot.chatView"
+          "command": "psCopilot.configureApiKey",
+          "when": "view == psCopilot.chatView",
+          "group": "navigation"
         }
       ]
     }
