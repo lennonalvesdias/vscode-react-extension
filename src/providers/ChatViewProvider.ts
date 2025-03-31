@@ -51,6 +51,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     // Carregar API Key
     this._loadApiKey();
+
+    // Verificar se já tem API Key configurada
+    this._configService.hasApiKey().then(hasApiKey => {
+      if (!hasApiKey) {
+        // Adicionar mensagem de boas-vindas instruindo sobre a API Key
+        this._messages.push({
+          text: 'Bem-vindo ao PS Copilot! Para começar, você precisa configurar sua API Key da OpenAI. Clique no botão "Configurar API Key" quando aparecer na notificação ou use o comando "PS Copilot: Configurar API Key da OpenAI" na paleta de comandos (Ctrl+Shift+P).',
+          sender: 'assistant',
+          timestamp: new Date()
+        });
+      }
+    });
   }
 
   private async _loadApiKey() {
@@ -137,6 +149,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             vscode.window.showInformationMessage(`Modelo alterado para: ${this._selectedModel}`);
             this._updateWebview();
             break;
+          case 'configApiKey':
+            vscode.commands.executeCommand('psCopilot.configureApiKey');
+            break;
         }
       }
     );
@@ -147,13 +162,36 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       // Verifica se tem API Key
       const apiKey = await this._configService.getApiKey();
       if (!apiKey) {
-        return 'Por favor, configure sua API Key da OpenAI usando o comando "Configurar API Key do PS Copilot".';
+        // Avisa o usuário na interface e oferece um botão para configurar a API Key
+        vscode.window.showErrorMessage(
+          'API Key da OpenAI não configurada',
+          'Configurar API Key'
+        ).then(selection => {
+          if (selection === 'Configurar API Key') {
+            vscode.commands.executeCommand('psCopilot.configureApiKey');
+          }
+        });
+
+        return 'API Key não configurada. Por favor, clique no botão "Configurar API Key" na notificação acima ou use o comando "PS Copilot: Configurar API Key da OpenAI" na paleta de comandos (Ctrl+Shift+P).';
       }
 
       // Processa a mensagem com o OpenAI
       return await this._openAIService.processChat(text);
     } catch (error) {
       console.error('Erro ao processar mensagem:', error);
+
+      // Se o erro for de API Key não configurada, mostra a opção de configurar
+      if (error instanceof Error && error.message.includes('API Key não configurada')) {
+        vscode.window.showErrorMessage(
+          'API Key da OpenAI não configurada',
+          'Configurar API Key'
+        ).then(selection => {
+          if (selection === 'Configurar API Key') {
+            vscode.commands.executeCommand('psCopilot.configureApiKey');
+          }
+        });
+      }
+
       return `Ocorreu um erro ao processar sua mensagem: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
     }
   }
@@ -388,6 +426,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         font-size: 14px;
         line-height: 1.5;
       }
+
+      .empty-state-actions {
+        margin-top: 16px;
+      }
+
+      .action-button {
+        background-color: var(--button-bg);
+        color: var(--button-fg);
+        border: none;
+        border-radius: 4px;
+        padding: 8px 16px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      .action-button:hover {
+        opacity: 0.9;
+      }
     `;
 
     // Renderiza as mensagens
@@ -401,6 +457,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             Assistente de desenvolvimento React com múltiplos agentes especializados.<br>
             Faça perguntas sobre desenvolvimento, design, arquitetura ou testes.
           </p>
+          <div class="empty-state-actions">
+            <button id="configApiKeyBtn" class="action-button">Configurar API Key</button>
+          </div>
         </div>
       `;
     } else {
@@ -453,6 +512,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       const sendButton = document.getElementById('sendButton');
       const modelSelector = document.getElementById('modelSelector');
       const clearButton = document.getElementById('clearButton');
+      const configApiKeyBtn = document.getElementById('configApiKeyBtn');
 
       // Ajusta altura do textarea conforme digitação
       function adjustTextareaHeight() {
@@ -517,6 +577,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
       // Rolar para o final inicialmente
       scrollToBottom();
+
+      // Configurar API Key
+      if (configApiKeyBtn) {
+        configApiKeyBtn.addEventListener('click', () => {
+          vscode.postMessage({
+            command: 'configApiKey'
+          });
+        });
+      }
     `;
 
     return `<!DOCTYPE html>
