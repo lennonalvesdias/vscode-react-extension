@@ -105,15 +105,130 @@ export class OpenAIService {
   async analyzeRequest(content: string): Promise<AnalysisResult> {
     try {
       const analysis = await this.makeRequest(
-        'Você é um especialista em desenvolvimento React. Analise a solicitação e forneça: 1. Tipo de componente (page, component, hook, service) 2. Requisitos técnicos 3. Dependências necessárias 4. Nome sugerido 5. Descrição detalhada',
+        `Você é um especialista em desenvolvimento React.
+        Analise a solicitação do usuário e forneça uma resposta estruturada para ajudar a gerar código.
+
+        Foque em:
+        1. Identificar o tipo principal do que está sendo solicitado (page, component, hook, service)
+        2. Identificar um nome adequado para o componente principal
+        3. Detectar se há componentes relacionados que precisam ser criados (serviços, hooks)
+        4. Identificar requisitos funcionais e técnicos importantes
+        5. Listar possíveis dependências necessárias
+
+        Forneça sua análise no seguinte formato JSON:
+        {
+          "type": "page|component|hook|service",
+          "name": "NomeSugerido",
+          "complexity": "low|medium|high",
+          "requirements": ["lista", "de", "requisitos"],
+          "dependencies": ["dependência1", "dependência2"],
+          "relatedComponents": [
+            {"type": "service|hook|component", "name": "NomeRelacionado", "purpose": "descrição"}
+          ],
+          "risks": ["possível risco 1", "possível risco 2"],
+          "recommendations": ["recomendação 1", "recomendação 2"]
+        }
+
+        Identifique também:
+        - Validações necessárias
+        - Estados que precisam ser gerenciados
+        - Interações com APIs
+        - Armazenamento de dados (localStorage, etc)
+        - UI/UX considerações importantes`,
         content
       );
 
-      return this.parseAnalysis(analysis);
+      // Tentar extrair o JSON da resposta
+      try {
+        const jsonMatch = analysis.match(/```json\s*([\s\S]*?)\s*```/) ||
+          analysis.match(/\{[\s\S]*\}/);
+
+        if (jsonMatch) {
+          const jsonStr = jsonMatch[0].replace(/```json|```/g, '').trim();
+          const parsedResult = JSON.parse(jsonStr);
+
+          // Converter para o formato AnalysisResult
+          return {
+            type: parsedResult.type,
+            name: parsedResult.name,
+            complexity: parsedResult.complexity || 'medium',
+            dependencies: parsedResult.dependencies || [],
+            risks: parsedResult.risks || [],
+            recommendations: parsedResult.recommendations || [],
+            // Informações adicionais
+            description: content,
+            relatedComponents: parsedResult.relatedComponents
+          };
+        }
+      } catch (jsonError) {
+        console.error('Erro ao analisar JSON da resposta:', jsonError);
+      }
+
+      // Fallback para processamento manual se não conseguir extrair JSON
+      return this.parseAnalysis(analysis, content);
     } catch (error) {
       console.error('Erro na análise da solicitação:', error);
       throw error;
     }
+  }
+
+  private parseAnalysis(analysis: string, originalRequest: string): AnalysisResult {
+    const result: AnalysisResult = {
+      complexity: 'medium',
+      dependencies: [],
+      risks: [],
+      recommendations: [],
+      description: originalRequest
+    };
+
+    // Extrair tipo
+    if (analysis.includes('página') || analysis.includes('page')) {
+      result.type = 'page';
+    } else if (analysis.includes('hook')) {
+      result.type = 'hook';
+    } else if (analysis.includes('serviço') || analysis.includes('service')) {
+      result.type = 'service';
+    } else {
+      result.type = 'component';
+    }
+
+    // Extrair nome
+    const nameMatch = analysis.match(/nome[:\s]+([a-zA-Z0-9]+)/i) ||
+      analysis.match(/([A-Z][a-zA-Z0-9]+)(Component|Page|Service|Hook)/);
+
+    if (nameMatch) {
+      result.name = nameMatch[1];
+    } else {
+      // Nome padrão baseado no tipo
+      switch (result.type) {
+        case 'page':
+          result.name = 'Page';
+          break;
+        case 'hook':
+          result.name = 'useCustom';
+          break;
+        case 'service':
+          result.name = 'Service';
+          break;
+        default:
+          result.name = 'Component';
+      }
+    }
+
+    // Extrair complexidade
+    if (analysis.includes('complexidade alta') || analysis.includes('high complexity')) {
+      result.complexity = 'high';
+    } else if (analysis.includes('complexidade baixa') || analysis.includes('low complexity')) {
+      result.complexity = 'low';
+    }
+
+    // Extrair dependências
+    const depMatches = analysis.match(/dependências?:?\s*([\w\s,@-]+)/i);
+    if (depMatches) {
+      result.dependencies = depMatches[1].split(/,|\n/).map(d => d.trim()).filter(Boolean);
+    }
+
+    return result;
   }
 
   async generateCode(prompt: string): Promise<CodeGenerationResult> {
@@ -177,16 +292,6 @@ export class OpenAIService {
       'Você é um especialista em segurança de aplicações React. Analise a segurança do componente e forneça recomendações, problemas identificados, um score de 0-100 e vulnerabilidades encontradas.',
       code
     );
-  }
-
-  private parseAnalysis(_analysis: string): AnalysisResult {
-    // Implementação simplificada para atender ao tipo de retorno
-    return {
-      complexity: 'medium',
-      dependencies: [],
-      risks: [],
-      recommendations: []
-    };
   }
 
   private parseCodeGeneration(result: string): CodeGenerationResult {

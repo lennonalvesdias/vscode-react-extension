@@ -31,6 +31,14 @@ export interface AnalysisResult {
   dependencies: string[];
   risks: string[];
   recommendations: string[];
+  type?: 'component' | 'hook' | 'service' | 'page';
+  name?: string;
+  description?: string;
+  relatedComponents?: Array<{
+    type: 'component' | 'hook' | 'service' | 'page';
+    name: string;
+    purpose?: string;
+  }>;
 }
 
 export interface CodeGenerationResult {

@@ -3,6 +3,7 @@ import { OpenAIService } from '../services/OpenAIService';
 import { AgentContext } from '../agents/types';
 import { ConfigurationService } from '../services/ConfigurationService';
 import { onApiKeyConfigured } from '../extension';
+import { CodeGenerationService } from '../services/CodeGenerationService';
 
 interface ChatMessage {
   text: string;
@@ -24,6 +25,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   ];
   private _openAIService: OpenAIService;
   private _configService: ConfigurationService;
+  private _codeGenerationService: CodeGenerationService;
   private _isProcessing = false;
 
   constructor(
@@ -49,6 +51,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     this._configService = new ConfigurationService(agentContext);
     this._openAIService = new OpenAIService(agentContext);
+    this._codeGenerationService = new CodeGenerationService(agentContext);
 
     // Carregar API Key
     this._loadApiKey();
@@ -195,6 +198,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         return 'API Key não configurada. Por favor, clique no botão "Configurar API Key" na notificação acima ou use o comando "PS Copilot: Configurar API Key da OpenAI" na paleta de comandos (Ctrl+Shift+P).';
       }
 
+      // Verifica se a mensagem é um pedido para gerar código
+      if (this._isCodeGenerationRequest(text)) {
+        return await this._handleCodeGeneration(text);
+      }
+
       // Processa a mensagem com o OpenAI
       return await this._openAIService.processChat(text);
     } catch (error) {
@@ -214,6 +222,294 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
       return `Ocorreu um erro ao processar sua mensagem: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
     }
+  }
+
+  /**
+   * Verifica se a mensagem é uma solicitação de geração de código
+   */
+  private _isCodeGenerationRequest(text: string): boolean {
+    const lowerText = text.toLowerCase();
+
+    // Padrões de frases que indicam solicitação de geração de código
+    const codeGenPatterns = [
+      'crie um componente',
+      'criar componente',
+      'crie uma página',
+      'criar página',
+      'crie um hook',
+      'criar hook',
+      'crie um serviço',
+      'criar serviço',
+      'gere um componente',
+      'gerar componente',
+      'implemente um componente',
+      'implementar componente',
+      'desenvolva um componente',
+      'desenvolver componente',
+      'gere uma página',
+      'desenvolva uma página',
+      'implemente uma página',
+      'gere uma interface',
+      'desenvolva uma interface',
+      'gere um formulário',
+      'crie um formulário',
+      'gere um serviço',
+      'gere um hook',
+      'crie um módulo',
+      'gere um módulo',
+      'código para',
+      'implementação de',
+      'desenvolver um',
+      'desenvolva um',
+      'construa um',
+      'construir um'
+    ];
+
+    return codeGenPatterns.some(pattern => lowerText.includes(pattern));
+  }
+
+  /**
+   * Processa a solicitação de geração de código
+   */
+  private async _handleCodeGeneration(text: string): Promise<string> {
+    try {
+      // Verificar se há um workspace aberto
+      if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
+        return 'Não foi possível gerar o código porque nenhum workspace está aberto. Abra um projeto para gerar código.';
+      }
+
+      // Analisar a solicitação para extrair informações
+      const analysisResult = await this._openAIService.analyzeRequest(text);
+
+      // Determinar os tipos de artefatos a serem gerados
+      const artifacts = this._identifyRequiredArtifacts(text, analysisResult);
+
+      // Solicitar confirmação do usuário
+      let confirmationMessage = `Vou gerar os seguintes artefatos com base na sua descrição:\n`;
+      artifacts.forEach(artifact => {
+        confirmationMessage += `- ${artifact.type}: ${artifact.name}\n`;
+      });
+
+      const confirmation = await vscode.window.showInformationMessage(
+        confirmationMessage + `\nDeseja continuar?`,
+        'Sim, gerar código',
+        'Cancelar'
+      );
+
+      if (confirmation !== 'Sim, gerar código') {
+        return 'Geração de código cancelada.';
+      }
+
+      // Resultados de todos os artefatos gerados
+      let allFiles: Array<{ path: string; content: string }> = [];
+
+      // Gerar cada artefato
+      for (const artifact of artifacts) {
+        const files = await this._codeGenerationService.generateReactComponent({
+          name: artifact.name,
+          type: artifact.type,
+          description: this._createArtifactDescription(text, artifact),
+          path: artifact.path
+        });
+
+        allFiles = [...allFiles, ...files];
+      }
+
+      // Lista de arquivos gerados
+      const fileList = allFiles.map(file => `- ${file.path}`).join('\n');
+
+      return `✅ Código gerado com sucesso!\n\nArquivos criados:\n${fileList}\n\nOs arquivos foram criados no workspace e abertos no editor.`;
+    } catch (error) {
+      console.error('Erro na geração de código:', error);
+      return `❌ Erro ao gerar código: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
+    }
+  }
+
+  /**
+   * Identifica os artefatos necessários com base na descrição do usuário
+   */
+  private _identifyRequiredArtifacts(
+    text: string,
+    analysisResult: any
+  ): Array<{ type: 'component' | 'hook' | 'service' | 'page', name: string, path?: string }> {
+    const lowerText = text.toLowerCase();
+    const artifacts: Array<{ type: 'component' | 'hook' | 'service' | 'page', name: string, path?: string }> = [];
+
+    // Primeira verificação: usar o resultado da análise, se disponível
+    if (analysisResult.type && analysisResult.name) {
+      artifacts.push({
+        type: analysisResult.type,
+        name: analysisResult.name
+      });
+    }
+
+    // Verificação de contexto: página com serviço relacionado
+    if (lowerText.includes('página') && lowerText.includes('serviço')) {
+      // Se a análise já identificou a página, não precisamos adicionar novamente
+      if (!artifacts.some(a => a.type === 'page')) {
+        const pageName = analysisResult.name || this._extractNameFromText(text, 'page');
+        artifacts.push({
+          type: 'page',
+          name: pageName
+        });
+      }
+
+      // Adicionar o serviço relacionado
+      if (!artifacts.some(a => a.type === 'service')) {
+        // Nome do serviço baseado no contexto
+        let serviceName = '';
+
+        if (lowerText.includes('login') || lowerText.includes('autenticação')) {
+          serviceName = 'AuthService';
+        } else if (lowerText.includes('usuário') || lowerText.includes('perfil')) {
+          serviceName = 'UserService';
+        } else if (lowerText.includes('produto')) {
+          serviceName = 'ProductService';
+        } else {
+          // Nome genérico baseado na página
+          serviceName = `${analysisResult.name || 'Api'}Service`;
+        }
+
+        artifacts.push({
+          type: 'service',
+          name: serviceName
+        });
+      }
+    }
+
+    // Verificação para hooks
+    if (lowerText.includes('hook') || lowerText.includes('estado') ||
+      lowerText.includes('formulário') || lowerText.includes('validação')) {
+      if (!artifacts.some(a => a.type === 'hook')) {
+        let hookName = '';
+
+        if (lowerText.includes('formulário')) {
+          hookName = 'useForm';
+        } else if (lowerText.includes('autenticação') || lowerText.includes('login')) {
+          hookName = 'useAuth';
+        } else if (lowerText.includes('validação')) {
+          hookName = 'useValidation';
+        } else {
+          // Nome genérico
+          hookName = `use${analysisResult.name || 'Custom'}`;
+        }
+
+        artifacts.push({
+          type: 'hook',
+          name: hookName
+        });
+      }
+    }
+
+    // Se nenhum artefato foi identificado, usar um padrão baseado no texto
+    if (artifacts.length === 0) {
+      if (lowerText.includes('página')) {
+        artifacts.push({
+          type: 'page',
+          name: this._extractNameFromText(text, 'page') || 'Page'
+        });
+      } else if (lowerText.includes('serviço')) {
+        artifacts.push({
+          type: 'service',
+          name: this._extractNameFromText(text, 'service') || 'Service'
+        });
+      } else if (lowerText.includes('hook')) {
+        artifacts.push({
+          type: 'hook',
+          name: this._extractNameFromText(text, 'hook') || 'useCustom'
+        });
+      } else {
+        // Padrão é componente
+        artifacts.push({
+          type: 'component',
+          name: this._extractNameFromText(text, 'component') || 'Component'
+        });
+      }
+    }
+
+    return artifacts;
+  }
+
+  /**
+   * Tenta extrair um nome de componente a partir do texto
+   */
+  private _extractNameFromText(text: string, type: string): string {
+    const lowerText = text.toLowerCase();
+
+    // Padrões para extração baseados no tipo
+    let patterns: RegExp[] = [];
+
+    switch (type) {
+      case 'page':
+        patterns = [
+          /página\s+de\s+([a-zA-Z]+)/i,
+          /página\s+([a-zA-Z]+)/i,
+          /([a-zA-Z]+)\s+page/i
+        ];
+        break;
+      case 'component':
+        patterns = [
+          /componente\s+de\s+([a-zA-Z]+)/i,
+          /componente\s+([a-zA-Z]+)/i,
+          /([a-zA-Z]+)\s+component/i
+        ];
+        break;
+      case 'service':
+        patterns = [
+          /serviço\s+de\s+([a-zA-Z]+)/i,
+          /serviço\s+([a-zA-Z]+)/i,
+          /([a-zA-Z]+)\s+service/i
+        ];
+        break;
+      case 'hook':
+        patterns = [
+          /hook\s+de\s+([a-zA-Z]+)/i,
+          /hook\s+([a-zA-Z]+)/i,
+          /use\s*([a-zA-Z]+)/i
+        ];
+        break;
+    }
+
+    // Tentar cada padrão
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        // Capitalizar a primeira letra
+        return match[1].charAt(0).toUpperCase() + match[1].slice(1);
+      }
+    }
+
+    // Extrair algumas palavras-chave comuns
+    if (lowerText.includes('login')) { return 'Login'; }
+    if (lowerText.includes('cadastro')) { return 'Cadastro'; }
+    if (lowerText.includes('perfil')) { return 'Profile'; }
+    if (lowerText.includes('dashboard')) { return 'Dashboard'; }
+    if (lowerText.includes('produto')) { return 'Product'; }
+    if (lowerText.includes('lista')) { return 'List'; }
+    if (lowerText.includes('formulário')) { return 'Form'; }
+    if (lowerText.includes('autenticação')) { return 'Auth'; }
+
+    // Retornar null se não encontrar
+    return '';
+  }
+
+  /**
+   * Cria uma descrição detalhada para o artefato
+   */
+  private _createArtifactDescription(text: string, artifact: { type: string, name: string }): string {
+    let description = text;
+
+    // Adicionar contexto específico para o artefato
+    if (artifact.type === 'service' && text.toLowerCase().includes('página') &&
+      !text.toLowerCase().includes('serviço')) {
+      description += ` Este serviço deve fornecer as funcionalidades de backend necessárias para a página ${artifact.name}.`;
+    }
+
+    if (artifact.type === 'hook' && !text.toLowerCase().includes('hook')) {
+      description += ` Este hook deve encapsular a lógica de estado e comportamentos necessários.`;
+    }
+
+    return description;
   }
 
   private async _updateWebview() {
@@ -467,7 +763,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
     `;
 
-    // Verifica se a API Key está configurada
+    // Adiciona estilos para o estado vazio se tiver API Key
     const hasApiKey = await this._configService.hasApiKey();
 
     // Renderiza as mensagens
@@ -479,7 +775,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <h3>Bem-vindo ao PS Copilot</h3>
           <p>
             Assistente de desenvolvimento React com múltiplos agentes especializados.<br>
-            Faça perguntas sobre desenvolvimento, design, arquitetura ou testes.
+            Faça perguntas sobre desenvolvimento, design, arquitetura ou testes.<br><br>
+            <strong>Exemplos de comandos:</strong><br>
+            • "Crie um componente de botão com variações de tamanho e cor"<br>
+            • "Desenvolva um hook para gerenciar autenticação com JWT"<br>
+            • "Implemente um serviço para comunicação com a API de produtos"<br>
+            • "Crie uma página de dashboard com gráficos e filtros"
           </p>
           ${!hasApiKey ? `
           <div class="empty-state-actions">
@@ -621,7 +922,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
           <title>PS Copilot Chat</title>
-          <style>${styleContent}</style>
+          <style>
+            ${styleContent}
+          </style>
         </head>
         <body>
           <div class="chat-container">
@@ -659,7 +962,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               </button>
             </div>
           </div>
-          <script>${scriptContent}</script>
+          <script>
+            ${scriptContent}
+          </script>
         </body>
       </html>`;
   }
