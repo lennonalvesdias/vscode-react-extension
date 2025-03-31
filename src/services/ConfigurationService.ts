@@ -2,8 +2,12 @@ import * as vscode from 'vscode';
 import { AgentContext } from '../agents/types';
 import { SecurityService } from './SecurityService';
 
+/**
+ * Serviço para gerenciar configurações da extensão
+ */
 export class ConfigurationService {
-  private readonly API_KEY_KEY = 'openai.apiKey';
+  private readonly API_KEY_CONFIG = 'psCopilot.apiKey';
+  private readonly API_KEY_SECRET = 'ps-copilot-api-key';
   private securityService: SecurityService;
 
   constructor(private context: AgentContext) {
@@ -34,7 +38,10 @@ export class ConfigurationService {
       }
 
       // Armazena a API Key de forma segura
-      await this.securityService.secureStore(this.API_KEY_KEY, apiKey);
+      await this.securityService.secureStore(this.API_KEY_SECRET, apiKey);
+
+      // Também atualiza no globalState para garantir que todos os serviços usem a mesma API key
+      await this.context.globalState.update(this.API_KEY_SECRET, apiKey);
 
       // Registra a ação no log de auditoria
       this.securityService.logAudit('setApiKey', {
@@ -53,12 +60,54 @@ export class ConfigurationService {
     }
   }
 
-  async getApiKey(): Promise<string | undefined> {
-    return this.securityService.secureRetrieve(this.API_KEY_KEY);
+  /**
+   * Obtém a API Key armazenada no keytar ou nas configurações
+   * Este é o método principal para obter a API key que deve ser usado por todos os serviços
+   */
+  public async getApiKey(): Promise<string | undefined> {
+    try {
+      // Primeiro tenta obter do serviço seguro
+      let apiKey = await this.securityService.secureRetrieve(this.API_KEY_SECRET);
+
+      // Se não encontrar, tenta o globalState
+      if (!apiKey) {
+        apiKey = this.context.globalState.get<string>(this.API_KEY_SECRET);
+      }
+
+      // Por último, verifica nas configurações (menos seguro)
+      if (!apiKey) {
+        apiKey = vscode.workspace.getConfiguration().get<string>(this.API_KEY_CONFIG);
+      }
+
+      return apiKey;
+    } catch (error) {
+      console.error('Erro ao recuperar API Key:', error);
+      return undefined;
+    }
   }
 
-  async deleteApiKey(): Promise<void> {
-    await this.securityService.secureDelete(this.API_KEY_KEY);
+  /**
+   * Remove a API Key do armazenamento
+   */
+  public async clearApiKey(): Promise<void> {
+    try {
+      // Limpa de todos os locais de armazenamento para garantir consistência
+      await this.securityService.secureDelete(this.API_KEY_SECRET);
+      await this.context.globalState.update(this.API_KEY_SECRET, undefined);
+
+      // Registra a ação no log de auditoria
+      this.securityService.logAudit('clearApiKey', {
+        success: true,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Erro ao limpar API Key:', error);
+      this.securityService.logAudit('clearApiKey', {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        timestamp: new Date().toISOString()
+      });
+    }
   }
 
   async hasApiKey(): Promise<boolean> {

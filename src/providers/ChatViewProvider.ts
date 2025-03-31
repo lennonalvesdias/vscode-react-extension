@@ -1,4 +1,7 @@
 import * as vscode from 'vscode';
+import { OpenAIService } from '../services/OpenAIService';
+import { AgentContext } from '../agents/types';
+import { ConfigurationService } from '../services/ConfigurationService';
 
 interface ChatMessage {
   text: string;
@@ -18,6 +21,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     'gpt-4-turbo',
     'gpt-4o'
   ];
+  private _openAIService: OpenAIService;
+  private _configService: ConfigurationService;
+  private _isProcessing = false;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -25,6 +31,37 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   ) {
     // Carregar modelo selecionado das configurações
     this._selectedModel = this._context.globalState.get<string>('selectedModel') || 'gpt-3.5-turbo';
+
+    // Inicializar serviços
+    const agentContext: AgentContext = {
+      apiKey: '',
+      model: this._selectedModel,
+      temperature: 0.7,
+      maxTokens: 2000,
+      timeout: 30000,
+      extensionUri: _extensionUri,
+      extensionPath: _extensionUri.fsPath,
+      globalState: _context.globalState,
+      workspaceState: _context.workspaceState,
+      configuration: vscode.workspace.getConfiguration('psCopilot')
+    };
+
+    this._configService = new ConfigurationService(agentContext);
+    this._openAIService = new OpenAIService(agentContext);
+
+    // Carregar API Key
+    this._loadApiKey();
+  }
+
+  private async _loadApiKey() {
+    try {
+      const apiKey = await this._configService.getApiKey();
+      if (apiKey) {
+        this._openAIService.setApiKey(apiKey);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar API Key:', error);
+    }
   }
 
   public resolveWebviewView(
@@ -50,6 +87,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         switch (message.command) {
           case 'sendMessage':
             try {
+              if (this._isProcessing) { return; }
+
               // Adiciona a mensagem do usuário
               const userMessage: ChatMessage = {
                 text: message.text,
@@ -59,6 +98,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               this._messages.push(userMessage);
 
               // Atualiza o HTML para mostrar a mensagem do usuário
+              this._updateWebview();
+
+              // Define o estado como processando
+              this._isProcessing = true;
               this._updateWebview();
 
               // Processa a mensagem
@@ -72,10 +115,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               };
               this._messages.push(assistantMessage);
 
+              // Define o estado como não processando
+              this._isProcessing = false;
+
               // Atualiza o HTML do webview
               this._updateWebview();
             } catch (error) {
+              this._isProcessing = false;
               vscode.window.showErrorMessage('Erro ao processar mensagem: ' + error);
+              this._updateWebview();
             }
             break;
           case 'clearChat':
@@ -85,6 +133,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           case 'changeModel':
             this._selectedModel = message.model;
             this._context.globalState.update('selectedModel', this._selectedModel);
+            this._openAIService.setModel(this._selectedModel);
             vscode.window.showInformationMessage(`Modelo alterado para: ${this._selectedModel}`);
             this._updateWebview();
             break;
@@ -94,9 +143,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async _processMessage(text: string): Promise<string> {
-    // Simula processamento com delay para mostrar feedback visual
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    return `Processado usando ${this._selectedModel}: "${text}".\nEsta é uma resposta de exemplo. No futuro, este texto será substituído com conteúdo real dos agentes.`;
+    try {
+      // Verifica se tem API Key
+      const apiKey = await this._configService.getApiKey();
+      if (!apiKey) {
+        return 'Por favor, configure sua API Key da OpenAI usando o comando "Configurar API Key do PS Copilot".';
+      }
+
+      // Processa a mensagem com o OpenAI
+      return await this._openAIService.processChat(text);
+    } catch (error) {
+      console.error('Erro ao processar mensagem:', error);
+      return `Ocorreu um erro ao processar sua mensagem: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
+    }
   }
 
   private _updateWebview() {
@@ -358,6 +417,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           </div>
         `;
       }
+    }
+
+    // Adiciona indicador de digitação se estiver processando
+    if (this._isProcessing) {
+      messagesHtml += `
+        <div class="message assistant-message">
+          <div>
+            <div class="message-content">
+              <div class="typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
     }
 
     // Cria o dropdown de modelos

@@ -1,241 +1,97 @@
-import OpenAI from 'openai';
-import { AgentContext, AnalysisResult, CodeGenerationResult } from '../agents/types';
+import axios from 'axios';
+import { AgentContext } from '../agents/types';
 
 export class OpenAIService {
-  private openai: OpenAI;
-  private apiKey: string;
-  private model: string;
+  private apiKey = '';
+  private model = 'gpt-3.5-turbo';
+  private apiUrl = 'https://api.openai.com/v1/chat/completions';
+  private temperature = 0.7;
+  private maxTokens = 2000;
+  private timeout = 30000;
 
-  constructor(context: AgentContext) {
-    this.apiKey = context.apiKey;
-    this.model = context.model;
-    this.openai = new OpenAI({ apiKey: this.apiKey });
+  constructor(private context: AgentContext) {
+    this.apiKey = context.apiKey || '';
+    this.model = context.model || 'gpt-3.5-turbo';
+    this.temperature = context.temperature || 0.7;
+    this.maxTokens = context.maxTokens || 2000;
+    this.timeout = context.timeout || 30000;
   }
 
-  async analyzeRequest(content: string): Promise<AnalysisResult> {
-    try {
-      const response = await this.openai.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'Você é um especialista em desenvolvimento React. Analise a solicitação e forneça: 1. Tipo de componente (page, component, hook, service) 2. Requisitos técnicos 3. Dependências necessárias 4. Nome sugerido 5. Descrição detalhada'
-          },
-          {
-            role: 'user',
-            content: content
-          }
-        ]
-      });
+  public setApiKey(apiKey: string): void {
+    // Importante: esta função apenas define a API key na instância atual do serviço.
+    // Para armazenar a API key para todas as instâncias, use ConfigurationService.setApiKey().
+    this.apiKey = apiKey;
+  }
 
-      const analysis = response.choices[0].message.content || '';
-      return this.parseAnalysis(analysis);
-    } catch (error) {
-      console.error('Erro na análise da solicitação:', error);
-      throw error;
+  public setModel(model: string): void {
+    this.model = model;
+  }
+
+  public async processChat(message: string): Promise<string> {
+    if (!this.apiKey) {
+      throw new Error('API Key não configurada');
     }
-  }
 
-  async generateCode(prompt: string): Promise<CodeGenerationResult> {
     try {
-      const response = await this.openai.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'Você é um especialista em desenvolvimento React. Gere código de alta qualidade seguindo as melhores práticas.'
+      const response = await axios.post(
+        this.apiUrl,
+        {
+          model: this.model,
+          messages: [
+            {
+              role: 'system',
+              content: 'Você é um assistente de desenvolvimento útil e eficiente especializado em React. Forneça respostas concisas, práticas e informativas para ajudar no desenvolvimento.'
+            },
+            {
+              role: 'user',
+              content: message
+            }
+          ],
+          temperature: this.temperature,
+          max_tokens: this.maxTokens
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`
           },
-          {
-            role: 'user',
-            content: prompt
+          timeout: this.timeout
+        }
+      );
+
+      // Extrair e retornar a resposta
+      if (response.data.choices && response.data.choices.length > 0) {
+        return response.data.choices[0].message.content.trim();
+      } else {
+        throw new Error('Resposta vazia da API');
+      }
+    } catch (error: unknown) {
+      console.error('Erro na chamada da API OpenAI:', error);
+
+      if (axios.isAxiosError(error)) {
+        if (error.response) {
+          // Erro com resposta do servidor (4xx, 5xx)
+          const status = error.response.status;
+          const data = error.response.data;
+
+          if (status === 401) {
+            throw new Error('API Key inválida. Por favor, verifique sua chave.');
+          } else if (status === 429) {
+            throw new Error('Limite de requisições excedido. Tente novamente mais tarde.');
+          } else {
+            throw new Error(`Erro da API (${status}): ${data.error?.message || JSON.stringify(data)}`);
           }
-        ]
-      });
-
-      const result = response.choices[0].message.content || '';
-      return this.parseCodeGeneration(result);
-    } catch (error) {
-      console.error('Erro na geração de código:', error);
-      throw error;
+        } else if (error.request) {
+          // Erro sem resposta (timeout, etc)
+          throw new Error('Tempo limite excedido ou servidor indisponível.');
+        } else {
+          // Erro de configuração
+          throw new Error(`Erro na configuração da requisição: ${error.message}`);
+        }
+      } else {
+        // Erro não relacionado ao axios
+        throw new Error(`Erro inesperado: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      }
     }
-  }
-
-  async analyzeDesignCompliance(prompt: string): Promise<string> {
-    try {
-      const response = await this.openai.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'Você é um especialista em design system. Analise a aderência ao design system e forneça: 1. Recomendações de melhorias 2. Problemas identificados 3. Score de aderência (0-100) 4. Sugestões de componentes do design system a serem utilizados'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ]
-      });
-
-      return response.choices[0].message.content || 'Não foi possível analisar o design';
-    } catch (error) {
-      console.error('Erro na análise de design:', error);
-      throw error;
-    }
-  }
-
-  async analyzeBusinessAlignment(prompt: string): Promise<string> {
-    try {
-      const response = await this.openai.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'Você é um especialista em análise de negócios. Analise o alinhamento do componente com os objetivos do negócio e forneça recomendações, problemas identificados, um score de 0-100 e o valor para o negócio.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ]
-      });
-
-      return response.choices[0].message.content || '';
-    } catch (error) {
-      console.error('Erro na análise de negócio:', error);
-      throw error;
-    }
-  }
-
-  async analyzeArchitecture(prompt: string): Promise<string> {
-    try {
-      const response = await this.openai.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'Você é um especialista em arquitetura de software. Analise a consistência arquitetural do componente e forneça recomendações, problemas identificados, um score de 0-100 e os padrões de projeto utilizados.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ]
-      });
-
-      return response.choices[0].message.content || '';
-    } catch (error) {
-      console.error('Erro na análise arquitetural:', error);
-      throw error;
-    }
-  }
-
-  async analyzeAccessibility(prompt: string): Promise<string> {
-    try {
-      const response = await this.openai.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'Você é um especialista em acessibilidade web. Analise a acessibilidade do componente e forneça recomendações, problemas identificados, um score de 0-100 e sugestões de melhorias.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ]
-      });
-
-      return response.choices[0].message.content || '';
-    } catch (error) {
-      console.error('Erro na análise de acessibilidade:', error);
-      throw error;
-    }
-  }
-
-  async analyzeTestQuality(prompt: string): Promise<string> {
-    try {
-      const response = await this.openai.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'Você é um especialista em qualidade de testes. Analise a qualidade dos testes do componente e forneça recomendações, problemas identificados, um score de 0-100 e a cobertura de testes.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ]
-      });
-
-      return response.choices[0].message.content || '';
-    } catch (error) {
-      console.error('Erro na análise de qualidade dos testes:', error);
-      throw error;
-    }
-  }
-
-  async analyzePerformance(prompt: string): Promise<string> {
-    try {
-      const response = await this.openai.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'Você é um especialista em performance de aplicações React. Analise a performance do componente e forneça recomendações, problemas identificados, um score de 0-100 e métricas de performance.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ]
-      });
-
-      return response.choices[0].message.content || '';
-    } catch (error) {
-      console.error('Erro na análise de performance:', error);
-      throw error;
-    }
-  }
-
-  async analyzeSecurity(code: string): Promise<string> {
-    try {
-      const response = await this.openai.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'Você é um especialista em segurança de aplicações React. Analise a segurança do componente e forneça recomendações, problemas identificados, um score de 0-100 e vulnerabilidades encontradas.'
-          },
-          {
-            role: 'user',
-            content: code
-          }
-        ]
-      });
-
-      return response.choices[0].message.content || '';
-    } catch (error) {
-      console.error('Erro na análise de segurança:', error);
-      throw error;
-    }
-  }
-
-  private parseAnalysis(_analysis: string): AnalysisResult {
-    return {
-      complexity: 'medium',
-      dependencies: [],
-      risks: [],
-      recommendations: []
-    };
-  }
-
-  private parseCodeGeneration(_result: string): CodeGenerationResult {
-    return {
-      code: '',
-      dependencies: [],
-      documentation: '',
-      tests: []
-    };
   }
 }

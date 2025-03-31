@@ -25,7 +25,11 @@
       },
       {
         "command": "psCopilot.configureApiKey",
-        "title": "Configurar API Key do PS Copilot"
+        "title": "PS Copilot: Configurar API Key da OpenAI"
+      },
+      {
+        "command": "psCopilot.clearApiKey",
+        "title": "PS Copilot: Remover API Key da OpenAI"
       }
     ],
     "viewsContainers": {
@@ -45,6 +49,12 @@
           "name": "Chat",
           "icon": "media/icon.svg",
           "contextualTitle": "PS Copilot Chat"
+        }
+      ],
+      "explorer": [
+        {
+          "id": "psCopilot.chatView",
+          "name": "PS Copilot Chat"
         }
       ]
     },
@@ -104,6 +114,7 @@
     "webpack-cli": "^4.7.2"
   },
   "dependencies": {
+    "axios": "^1.8.4",
     "openai": "^4.0.0",
     "react": "^17.0.2",
     "react-dom": "^17.0.2"
