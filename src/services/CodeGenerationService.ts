@@ -44,6 +44,11 @@ export class CodeGenerationService {
    * @param request Detalhes do componente a ser gerado
    */
   public async generateReactComponent(request: ComponentGenerationRequest): Promise<GeneratedFile[]> {
+    // Verificar se a API Key está configurada
+    if (!this.openAIService.hasApiKey()) {
+      throw new Error('API Key não configurada');
+    }
+
     // Validar a requisição
     if (!request.name) {
       throw new Error('O nome do componente é obrigatório');

@@ -92,7 +92,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     try {
       const apiKey = await this._configService.getApiKey();
       if (apiKey) {
+        // Atualizar agentContext com a nova API Key
+        const agentContext: AgentContext = {
+          apiKey: apiKey,
+          model: this._selectedModel,
+          temperature: 0.7,
+          maxTokens: 2000,
+          timeout: 30000,
+          extensionUri: this._extensionUri,
+          extensionPath: this._extensionUri.fsPath,
+          globalState: this._context.globalState,
+          workspaceState: this._context.workspaceState,
+          configuration: vscode.workspace.getConfiguration('psCopilot')
+        };
+
+        // Atualizar os serviços com a nova API Key
         this._openAIService.setApiKey(apiKey);
+        this._codeGenerationService = new CodeGenerationService(agentContext);
+
+        console.log('API Key carregada e serviços atualizados com sucesso');
+      } else {
+        console.log('Nenhuma API Key encontrada');
       }
     } catch (error) {
       console.error('Erro ao carregar API Key:', error);
@@ -273,16 +293,56 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
    */
   private async _handleCodeGeneration(text: string): Promise<string> {
     try {
+      // Verificar se tem API Key configurada
+      const apiKey = await this._configService.getApiKey();
+      if (!apiKey) {
+        // Mostrar opção para configurar a API Key
+        vscode.window.showErrorMessage(
+          'API Key da OpenAI não configurada',
+          'Configurar API Key'
+        ).then(selection => {
+          if (selection === 'Configurar API Key') {
+            vscode.commands.executeCommand('psCopilot.configureApiKey');
+          }
+        });
+
+        return 'Não foi possível gerar o código porque a API Key não está configurada. Por favor, clique no botão "Configurar API Key" na notificação acima ou use o comando "PS Copilot: Configurar API Key da OpenAI" na paleta de comandos (Ctrl+Shift+P).';
+      }
+
       // Verificar se há um workspace aberto
       if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
         return 'Não foi possível gerar o código porque nenhum workspace está aberto. Abra um projeto para gerar código.';
       }
 
+      // Assegurar que o serviço de geração de código tenha a API Key correta
+      const agentContext: AgentContext = {
+        apiKey: apiKey,
+        model: this._selectedModel,
+        temperature: 0.7,
+        maxTokens: 2000,
+        timeout: 30000,
+        extensionUri: this._extensionUri,
+        extensionPath: this._extensionUri.fsPath,
+        globalState: this._context.globalState,
+        workspaceState: this._context.workspaceState,
+        configuration: vscode.workspace.getConfiguration('psCopilot')
+      };
+
+      // Recria o serviço de geração de código com a API Key atualizada
+      this._codeGenerationService = new CodeGenerationService(agentContext);
+      this._openAIService.setApiKey(apiKey);
+
+      console.log('Iniciando análise do pedido de geração de código');
+
       // Analisar a solicitação para extrair informações
       const analysisResult = await this._openAIService.analyzeRequest(text);
 
+      console.log('Análise concluída, identificando artefatos necessários');
+
       // Determinar os tipos de artefatos a serem gerados
       const artifacts = this._identifyRequiredArtifacts(text, analysisResult);
+
+      console.log(`Identificados ${artifacts.length} artefatos para geração`);
 
       // Solicitar confirmação do usuário
       let confirmationMessage = `Vou gerar os seguintes artefatos com base na sua descrição:\n`;
@@ -300,27 +360,54 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         return 'Geração de código cancelada.';
       }
 
+      console.log('Iniciando geração dos artefatos');
+
       // Resultados de todos os artefatos gerados
       let allFiles: Array<{ path: string; content: string }> = [];
 
       // Gerar cada artefato
       for (const artifact of artifacts) {
-        const files = await this._codeGenerationService.generateReactComponent({
-          name: artifact.name,
-          type: artifact.type,
-          description: this._createArtifactDescription(text, artifact),
-          path: artifact.path
-        });
+        console.log(`Gerando artefato: ${artifact.type} - ${artifact.name}`);
 
-        allFiles = [...allFiles, ...files];
+        try {
+          const files = await this._codeGenerationService.generateReactComponent({
+            name: artifact.name,
+            type: artifact.type,
+            description: this._createArtifactDescription(text, artifact),
+            path: artifact.path
+          });
+
+          allFiles = [...allFiles, ...files];
+          console.log(`Artefato ${artifact.name} gerado com sucesso: ${files.length} arquivos`);
+        } catch (artifactError) {
+          console.error(`Erro ao gerar artefato ${artifact.name}:`, artifactError);
+          throw artifactError;
+        }
       }
 
       // Lista de arquivos gerados
       const fileList = allFiles.map(file => `- ${file.path}`).join('\n');
 
+      console.log('Geração de código concluída com sucesso');
+
       return `✅ Código gerado com sucesso!\n\nArquivos criados:\n${fileList}\n\nOs arquivos foram criados no workspace e abertos no editor.`;
     } catch (error) {
       console.error('Erro na geração de código:', error);
+
+      // Se o erro for de API Key não configurada, mostrar opção para configurar
+      if (error instanceof Error && error.message.includes('API Key não configurada')) {
+        vscode.window.showErrorMessage(
+          'API Key da OpenAI não configurada',
+          'Configurar API Key'
+        ).then(selection => {
+          if (selection === 'Configurar API Key') {
+            vscode.commands.executeCommand('psCopilot.configureApiKey');
+          }
+        });
+
+        return `❌ Erro ao gerar código: API Key não configurada. Por favor, clique no botão "Configurar API Key" na notificação acima ou use o comando "PS Copilot: Configurar API Key da OpenAI" na paleta de comandos (Ctrl+Shift+P).`;
+      }
+
       return `❌ Erro ao gerar código: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
     }
   }

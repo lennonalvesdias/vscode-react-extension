@@ -27,10 +27,26 @@ export class OpenAIService {
     this.model = model;
   }
 
-  private async makeRequest(systemPrompt: string, userPrompt: string): Promise<string> {
-    if (!this.apiKey) {
+  /**
+   * Verifica se a API Key está configurada
+   * @returns true se a API Key estiver configurada, false caso contrário
+   */
+  public hasApiKey(): boolean {
+    return !!this.apiKey && this.apiKey.trim().length > 0;
+  }
+
+  /**
+   * Verifica se a API Key está configurada e lança um erro se não estiver
+   * @throws Error se a API Key não estiver configurada
+   */
+  private validateApiKey(): void {
+    if (!this.hasApiKey()) {
       throw new Error('API Key não configurada');
     }
+  }
+
+  private async makeRequest(systemPrompt: string, userPrompt: string): Promise<string> {
+    this.validateApiKey();
 
     try {
       const response = await axios.post(
@@ -96,6 +112,8 @@ export class OpenAIService {
   }
 
   public async processChat(message: string): Promise<string> {
+    this.validateApiKey();
+
     return this.makeRequest(
       'Você é um assistente de desenvolvimento útil e eficiente especializado em React. Forneça respostas concisas, práticas e informativas para ajudar no desenvolvimento.',
       message
@@ -104,6 +122,8 @@ export class OpenAIService {
 
   async analyzeRequest(content: string): Promise<AnalysisResult> {
     try {
+      this.validateApiKey();
+
       const analysis = await this.makeRequest(
         `Você é um especialista em desenvolvimento React.
         Analise a solicitação do usuário e forneça uma resposta estruturada para ajudar a gerar código.
@@ -233,6 +253,8 @@ export class OpenAIService {
 
   async generateCode(prompt: string): Promise<CodeGenerationResult> {
     try {
+      this.validateApiKey();
+
       const result = await this.makeRequest(
         'Você é um especialista em desenvolvimento React. Gere código de alta qualidade seguindo as melhores práticas.',
         prompt
