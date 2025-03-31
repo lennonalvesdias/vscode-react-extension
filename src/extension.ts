@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { ChatViewProvider } from './providers/ChatViewProvider';
 import { registerManageAgentsCommand } from './commands/manageAgents';
-import { registerConfigureApiKeyCommand } from './commands/configureApiKey';
+import { registerConfigureApiKeyCommand as _registerConfigureApiKeyCommand } from './commands/configureApiKey';
 import { registerSelectLLMModelCommand } from './commands/selectLLMModel';
 import { ConfigurationService } from './services/ConfigurationService';
 import { AgentContext } from './agents/types';

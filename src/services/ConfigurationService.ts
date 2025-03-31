@@ -87,6 +87,14 @@ export class ConfigurationService {
   }
 
   /**
+   * Verifica se há uma API Key configurada
+   */
+  public async hasApiKey(): Promise<boolean> {
+    const apiKey = await this.getApiKey();
+    return apiKey !== undefined && apiKey !== '';
+  }
+
+  /**
    * Remove a API Key do armazenamento
    */
   public async clearApiKey(): Promise<void> {
@@ -107,15 +115,6 @@ export class ConfigurationService {
         error: error instanceof Error ? error.message : 'Erro desconhecido',
         timestamp: new Date().toISOString()
       });
-    }
-  }
-
-  async hasApiKey(): Promise<boolean> {
-    try {
-      const apiKey = await this.getApiKey();
-      return !!apiKey;
-    } catch {
-      return false;
     }
   }
 

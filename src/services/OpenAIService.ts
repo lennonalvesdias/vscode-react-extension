@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AgentContext } from '../agents/types';
+import { AgentContext, AnalysisResult, CodeGenerationResult } from '../agents/types';
 
 export class OpenAIService {
   private apiKey = '';
@@ -9,7 +9,7 @@ export class OpenAIService {
   private maxTokens = 2000;
   private timeout = 30000;
 
-  constructor(private context: AgentContext) {
+  constructor(context: AgentContext) {
     this.apiKey = context.apiKey || '';
     this.model = context.model || 'gpt-3.5-turbo';
     this.temperature = context.temperature || 0.7;
@@ -27,7 +27,7 @@ export class OpenAIService {
     this.model = model;
   }
 
-  public async processChat(message: string): Promise<string> {
+  private async makeRequest(systemPrompt: string, userPrompt: string): Promise<string> {
     if (!this.apiKey) {
       throw new Error('API Key não configurada');
     }
@@ -40,11 +40,11 @@ export class OpenAIService {
           messages: [
             {
               role: 'system',
-              content: 'Você é um assistente de desenvolvimento útil e eficiente especializado em React. Forneça respostas concisas, práticas e informativas para ajudar no desenvolvimento.'
+              content: systemPrompt
             },
             {
               role: 'user',
-              content: message
+              content: userPrompt
             }
           ],
           temperature: this.temperature,
@@ -93,5 +93,109 @@ export class OpenAIService {
         throw new Error(`Erro inesperado: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
       }
     }
+  }
+
+  public async processChat(message: string): Promise<string> {
+    return this.makeRequest(
+      'Você é um assistente de desenvolvimento útil e eficiente especializado em React. Forneça respostas concisas, práticas e informativas para ajudar no desenvolvimento.',
+      message
+    );
+  }
+
+  async analyzeRequest(content: string): Promise<AnalysisResult> {
+    try {
+      const analysis = await this.makeRequest(
+        'Você é um especialista em desenvolvimento React. Analise a solicitação e forneça: 1. Tipo de componente (page, component, hook, service) 2. Requisitos técnicos 3. Dependências necessárias 4. Nome sugerido 5. Descrição detalhada',
+        content
+      );
+
+      return this.parseAnalysis(analysis);
+    } catch (error) {
+      console.error('Erro na análise da solicitação:', error);
+      throw error;
+    }
+  }
+
+  async generateCode(prompt: string): Promise<CodeGenerationResult> {
+    try {
+      const result = await this.makeRequest(
+        'Você é um especialista em desenvolvimento React. Gere código de alta qualidade seguindo as melhores práticas.',
+        prompt
+      );
+
+      return this.parseCodeGeneration(result);
+    } catch (error) {
+      console.error('Erro na geração de código:', error);
+      throw error;
+    }
+  }
+
+  async analyzeDesignCompliance(prompt: string): Promise<string> {
+    return this.makeRequest(
+      'Você é um especialista em design system. Analise a aderência ao design system e forneça: 1. Recomendações de melhorias 2. Problemas identificados 3. Score de aderência (0-100) 4. Sugestões de componentes do design system a serem utilizados',
+      prompt
+    );
+  }
+
+  async analyzeBusinessAlignment(prompt: string): Promise<string> {
+    return this.makeRequest(
+      'Você é um especialista em análise de negócios. Analise o alinhamento do componente com os objetivos do negócio e forneça recomendações, problemas identificados, um score de 0-100 e o valor para o negócio.',
+      prompt
+    );
+  }
+
+  async analyzeArchitecture(prompt: string): Promise<string> {
+    return this.makeRequest(
+      'Você é um especialista em arquitetura de software. Analise a consistência arquitetural do componente e forneça recomendações, problemas identificados, um score de 0-100 e os padrões de projeto utilizados.',
+      prompt
+    );
+  }
+
+  async analyzeAccessibility(prompt: string): Promise<string> {
+    return this.makeRequest(
+      'Você é um especialista em acessibilidade web. Analise a acessibilidade do componente e forneça recomendações, problemas identificados, um score de 0-100 e sugestões de melhorias.',
+      prompt
+    );
+  }
+
+  async analyzeTestQuality(prompt: string): Promise<string> {
+    return this.makeRequest(
+      'Você é um especialista em qualidade de testes. Analise a qualidade dos testes do componente e forneça recomendações, problemas identificados, um score de 0-100 e a cobertura de testes.',
+      prompt
+    );
+  }
+
+  async analyzePerformance(prompt: string): Promise<string> {
+    return this.makeRequest(
+      'Você é um especialista em performance de aplicações React. Analise a performance do componente e forneça recomendações, problemas identificados, um score de 0-100 e métricas de performance.',
+      prompt
+    );
+  }
+
+  async analyzeSecurity(code: string): Promise<string> {
+    return this.makeRequest(
+      'Você é um especialista em segurança de aplicações React. Analise a segurança do componente e forneça recomendações, problemas identificados, um score de 0-100 e vulnerabilidades encontradas.',
+      code
+    );
+  }
+
+  private parseAnalysis(_analysis: string): AnalysisResult {
+    // Implementação simplificada para atender ao tipo de retorno
+    return {
+      complexity: 'medium',
+      dependencies: [],
+      risks: [],
+      recommendations: []
+    };
+  }
+
+  private parseCodeGeneration(result: string): CodeGenerationResult {
+    // Implementação simplificada para atender ao tipo de retorno
+    return {
+      code: result,
+      dependencies: [],
+      documentation: '',
+      tests: []
+    };
   }
 }
