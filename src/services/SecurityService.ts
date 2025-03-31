@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { OpenAIService } from './OpenAIService';
 import { AgentContext } from '../agents/types';
@@ -148,49 +147,23 @@ export class SecurityService {
     return decrypted;
   }
 
-  sanitizeCode(code: string): string {
-    // Remove comentários maliciosos
-    code = code.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '');
-
-    // Sanitiza inputs
-    code = this.sanitizeInputs(code);
-
-    // Remove imports suspeitos
-    code = this.removeSuspiciousImports(code);
-
-    return code;
-  }
-
-  private sanitizeInputs(code: string): string {
-    // Escapa caracteres especiais em strings
-    return code.replace(/(['"])((?:\\\1|.)*?)\1/g, (match, quote, content) => {
-      return quote + content.replace(/[<>&'"]/g, (char: string) => {
-        const entities: { [key: string]: string } = {
-          '<': '&lt;',
-          '>': '&gt;',
-          '&': '&amp;',
-          "'": '&#39;',
-          '"': '&quot;'
-        };
-        return entities[char];
-      }) + quote;
+  public sanitizeCode(code: string): string {
+    return code.replace(/(['"])((?:\\\1|.)*?)\1/g, (_match, quote, content) => {
+      return `${quote}${this.escapeSpecialCharacters(content)}${quote}`;
     });
   }
 
-  private removeSuspiciousImports(code: string): string {
-    const suspiciousModules = [
-      'child_process',
-      'fs',
-      'path',
-      'crypto',
-      'http',
-      'https',
-      'net'
-    ];
-
-    return code.replace(
-      new RegExp(`import.*?{.*?(${suspiciousModules.join('|')}).*?}.*?from.*?['"].*?['"]`, 'g'),
-      ''
-    );
+  private escapeSpecialCharacters(content: string): string {
+    // Implemente a lógica para escapar caracteres especiais
+    return content.replace(/[<>&'"]/g, (char: string) => {
+      const entities: { [key: string]: string } = {
+        '<': '&lt;',
+        '>': '&gt;',
+        '&': '&amp;',
+        "'": '&#39;',
+        '"': '&quot;'
+      };
+      return entities[char];
+    });
   }
 }

@@ -1,11 +1,7 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
-import { ChatInterface } from '../components/ChatInterface';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'psCopilot.chatView';
-
-  private _view?: vscode.WebviewView;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -13,11 +9,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
-    context: vscode.WebviewViewResolveContext,
+    _context: vscode.WebviewViewResolveContext,
     _token: vscode.CancellationToken,
   ) {
-    this._view = webviewView;
-
     webviewView.webview.options = {
       enableScripts: true,
       localResourceRoots: [this._extensionUri]

@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import { AgentMessage, AgentContext } from './types';
 import { DeveloperAgent } from './DeveloperAgent';
 import { DesignAgent } from './DesignAgent';
@@ -8,7 +7,6 @@ import { ArchitectureAgent } from './ArchitectureAgent';
 import { PerformanceAgent } from './PerformanceAgent';
 import { SecurityAgent } from './SecurityAgent';
 import { AccessibilityAgent } from './AccessibilityAgent';
-import { AgentManagerService } from '../services/AgentManagerService';
 
 export class CoreCoordinator {
   private agents: Array<{
@@ -16,7 +14,7 @@ export class CoreCoordinator {
     isEnabled: boolean;
   }>;
 
-  constructor(private context: AgentContext) {
+  constructor(context: AgentContext) {
     this.agents = [
       { agent: new DeveloperAgent(context), isEnabled: true },
       { agent: new DesignAgent(context), isEnabled: true },

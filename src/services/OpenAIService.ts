@@ -1,36 +1,21 @@
 import OpenAI from 'openai';
-import { AgentContext } from '../agents/types';
-
-interface AnalysisResult {
-  componentType: 'page' | 'component' | 'hook' | 'service';
-  requirements: string[];
-  dependencies: string[];
-  suggestedName: string;
-  description: string;
-}
-
-interface CodeGenerationResult {
-  code: string;
-  tests: string;
-  documentation: string;
-}
+import { AgentContext, AnalysisResult, CodeGenerationResult } from '../agents/types';
 
 export class OpenAIService {
   private openai: OpenAI;
+  private apiKey: string;
+  private model: string;
 
-  constructor(private context: AgentContext) {
-    const apiKey = context.globalState.get<string>('psCopilot.openaiApiKey');
-    if (!apiKey) {
-      throw new Error('API Key não configurada');
-    }
-
-    this.openai = new OpenAI({ apiKey });
+  constructor(context: AgentContext) {
+    this.apiKey = context.apiKey;
+    this.model = context.model;
+    this.openai = new OpenAI({ apiKey: this.apiKey });
   }
 
   async analyzeRequest(content: string): Promise<AnalysisResult> {
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: this.model,
         messages: [
           {
             role: 'system',
@@ -54,7 +39,7 @@ export class OpenAIService {
   async generateCode(prompt: string): Promise<CodeGenerationResult> {
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: this.model,
         messages: [
           {
             role: 'system',
@@ -78,7 +63,7 @@ export class OpenAIService {
   async analyzeDesignCompliance(prompt: string): Promise<string> {
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: this.model,
         messages: [
           {
             role: 'system',
@@ -101,7 +86,7 @@ export class OpenAIService {
   async analyzeBusinessAlignment(prompt: string): Promise<string> {
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: this.model,
         messages: [
           {
             role: 'system',
@@ -124,7 +109,7 @@ export class OpenAIService {
   async analyzeArchitecture(prompt: string): Promise<string> {
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: this.model,
         messages: [
           {
             role: 'system',
@@ -147,7 +132,7 @@ export class OpenAIService {
   async analyzeAccessibility(prompt: string): Promise<string> {
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: this.model,
         messages: [
           {
             role: 'system',
@@ -170,7 +155,7 @@ export class OpenAIService {
   async analyzeTestQuality(prompt: string): Promise<string> {
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: this.model,
         messages: [
           {
             role: 'system',
@@ -193,7 +178,7 @@ export class OpenAIService {
   async analyzePerformance(prompt: string): Promise<string> {
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: this.model,
         messages: [
           {
             role: 'system',
@@ -216,7 +201,7 @@ export class OpenAIService {
   async analyzeSecurity(code: string): Promise<string> {
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: this.model,
         messages: [
           {
             role: 'system',
@@ -236,23 +221,21 @@ export class OpenAIService {
     }
   }
 
-  private parseAnalysis(analysis: string): AnalysisResult {
-    // Implementação do parsing da análise
+  private parseAnalysis(_analysis: string): AnalysisResult {
     return {
-      componentType: 'component',
-      requirements: [],
+      complexity: 'medium',
       dependencies: [],
-      suggestedName: '',
-      description: ''
+      risks: [],
+      recommendations: []
     };
   }
 
-  private parseCodeGeneration(result: string): CodeGenerationResult {
-    // Implementação do parsing da geração de código
+  private parseCodeGeneration(_result: string): CodeGenerationResult {
     return {
       code: '',
-      tests: '',
-      documentation: ''
+      dependencies: [],
+      documentation: '',
+      tests: []
     };
   }
 }

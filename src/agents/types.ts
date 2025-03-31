@@ -4,7 +4,7 @@ export interface AgentMessage {
   role: 'user' | 'assistant';
   type: 'request' | 'response' | 'error';
   content: string;
-  metadata?: Record<string, any>;
+  metadata?: any;
 }
 
 export interface Agent {
@@ -14,6 +14,11 @@ export interface Agent {
 }
 
 export interface AgentContext {
+  apiKey: string;
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  timeout: number;
   extensionUri: vscode.Uri;
   extensionPath: string;
   globalState: vscode.Memento;
@@ -22,15 +27,17 @@ export interface AgentContext {
 }
 
 export interface AnalysisResult {
-  score: number;
-  suggestions: string[];
-  issues: string[];
+  complexity: 'low' | 'medium' | 'high';
+  dependencies: string[];
+  risks: string[];
+  recommendations: string[];
 }
 
 export interface CodeGenerationResult {
   code: string;
-  explanation: string;
   dependencies: string[];
+  documentation: string;
+  tests: string[];
 }
 
 export interface DesignSystemCompliance {

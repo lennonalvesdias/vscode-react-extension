@@ -4,7 +4,7 @@ import { OpenAIService } from '../services/OpenAIService';
 export class DeveloperAgent implements Agent {
   private openAIService: OpenAIService;
 
-  constructor(private context: AgentContext) {
+  constructor(context: AgentContext) {
     this.openAIService = new OpenAIService(context);
   }
 

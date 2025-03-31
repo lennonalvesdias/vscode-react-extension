@@ -6,15 +6,8 @@ export class ConfigurationService {
   private readonly API_KEY_KEY = 'openai.apiKey';
   private securityService: SecurityService;
 
-  constructor(private context: vscode.ExtensionContext) {
-    const agentContext: AgentContext = {
-      extensionUri: context.extensionUri,
-      extensionPath: context.extensionPath,
-      globalState: context.globalState,
-      workspaceState: context.workspaceState,
-      configuration: vscode.workspace.getConfiguration('psCopilot')
-    };
-    this.securityService = new SecurityService(agentContext);
+  constructor(private context: AgentContext) {
+    this.securityService = new SecurityService(this.context);
   }
 
   async getConfiguration(key: string): Promise<string | undefined> {
@@ -92,5 +85,37 @@ export class ConfigurationService {
     } catch {
       return false;
     }
+  }
+
+  public getModel(): string {
+    return this.context.globalState.get<string>('psCopilot.model') || 'gpt-3.5-turbo';
+  }
+
+  public async setModel(model: string): Promise<void> {
+    await this.context.globalState.update('psCopilot.model', model);
+  }
+
+  public getTemperature(): number {
+    return this.context.globalState.get<number>('psCopilot.temperature') || 0.7;
+  }
+
+  public async setTemperature(temperature: number): Promise<void> {
+    await this.context.globalState.update('psCopilot.temperature', temperature);
+  }
+
+  public getMaxTokens(): number {
+    return this.context.globalState.get<number>('psCopilot.maxTokens') || 2000;
+  }
+
+  public async setMaxTokens(maxTokens: number): Promise<void> {
+    await this.context.globalState.update('psCopilot.maxTokens', maxTokens);
+  }
+
+  public getTimeout(): number {
+    return this.context.globalState.get<number>('psCopilot.timeout') || 30000;
+  }
+
+  public async setTimeout(timeout: number): Promise<void> {
+    await this.context.globalState.update('psCopilot.timeout', timeout);
   }
 }
