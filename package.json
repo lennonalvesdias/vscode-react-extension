@@ -59,7 +59,8 @@
       "explorer": [
         {
           "id": "psCopilot.explorerChatView",
-          "name": "PS Copilot Chat"
+          "name": "PS Copilot Chat",
+          "icon": "media/icon-chat.svg"
         }
       ]
     },

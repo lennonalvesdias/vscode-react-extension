@@ -1,6 +1,34 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(0, 1)">
+    <!-- Rosto do mosqueteiro -->
+    <circle cx="12" cy="11" r="4.5" fill="#FFECB3" stroke="#E65100" stroke-width="0.5"/>
+
+    <!-- Olhos -->
+    <ellipse cx="10.5" cy="10.5" rx="0.7" ry="0.9" fill="#3E2723"/>
+    <ellipse cx="13.5" cy="10.5" rx="0.7" ry="0.9" fill="#3E2723"/>
+
+    <!-- Chapéu de mosqueteiro (mais detalhado) -->
+    <path d="M7 7.5C7 7.5 9 5 12 5C15 5 17 7.5 17 7.5L16.5 8.5H7.5L7 7.5Z" fill="#0D47A1" stroke="#0D47A1" stroke-width="0.5"/>
+    <path d="M6.5 8.5H17.5" stroke="#0D47A1" stroke-width="1.2"/>
+    <path d="M8 4.5C8 4.5 10 3 12 3C14 3 16 4.5 16 4.5L15.5 6.5H8.5L8 4.5Z" fill="#0D47A1" stroke="#0D47A1" stroke-width="0.5"/>
+
+    <!-- Pena do chapéu (mais vistosa) -->
+    <path d="M15.5 4C16 3 17 2 17.5 1.5C17 2.5 16.5 4 15.5 5" stroke="#F44336" stroke-width="1.2" stroke-linecap="round"/>
+    <path d="M17.5 1.5C18 2 18.5 3 18 5" stroke="#F44336" stroke-width="1.2" stroke-linecap="round"/>
+
+    <!-- Bigode característico -->
+    <path d="M9 12C9.5 12.8 10.5 13.2 12 13.2C13.5 13.2 14.5 12.8 15 12" stroke="#5D4037" stroke-width="1" stroke-linecap="round"/>
+    <path d="M9 13C10 13.7 11 14 12 14C13 14 14 13.7 15 13" stroke="#5D4037" stroke-width="1" stroke-linecap="round"/>
+
+    <!-- Corpo simplificado -->
+    <path d="M9.5 15.5L9 19C9 19 10.5 20 12 20C13.5 20 15 19 15 19L14.5 15.5" stroke="#3949AB" stroke-width="1" stroke-linecap="round"/>
+
+    <!-- Espadas cruzadas (símbolo clássico de mosqueteiro) -->
+    <path d="M7 16L13 20.5" stroke="#FFC107" stroke-width="1.2" stroke-linecap="round"/>
+    <path d="M17 16L11 20.5" stroke="#FFC107" stroke-width="1.2" stroke-linecap="round"/>
+    <!-- Detalhe da empunhadura -->
+    <circle cx="12" cy="18.5" r="1" fill="#FFC107"/>
+    <path d="M11.5 18L12.5 19M11.5 19L12.5 18" stroke="#BF360C" stroke-width="0.5"/>
+  </g>
 </svg>
