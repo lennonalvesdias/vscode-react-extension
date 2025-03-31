@@ -1,0 +1,132 @@
+1. Visão Geral:
+O PS Copilot é uma extensão para o Visual Studio Code destinada a auxiliar os desenvolvedores React da empresa na criação de novas funcionalidades na plataforma de microfrontends "Product Setup". A extensão utiliza inteligência artificial para interpretar comandos em linguagem natural e gerar código de alta qualidade, aderente ao design system corporativo e integrado às bibliotecas e frameworks internos. Seu objetivo é atender a diversas demandas – desde a criação de componentes e integrações até o desenvolvimento de páginas completas – utilizando a documentação dos frameworks e do design system para manter a consistência com os padrões internos.
+
+2. Arquitetura:
+A solução deve ser construída de forma modular e escalável, com as seguintes camadas principais:
+
+Interface de Chat:
+
+Desenvolvida com base em um design inspirado no GitHub Copilot, deve exibir um histórico completo de conversas, fornecer feedback visual durante o processamento e permitir ao usuário selecionar o modelo de linguagem (LLM) desejado para a operação dos agentes.
+
+Serviços e Integrações:
+
+Módulos responsáveis por conectar a extensão a APIs externas (por exemplo, autenticação, comunicação entre microserviços) e integrar a documentação interna dos frameworks e do design system corporativo.
+
+Agentes Especializados (Multiagentes):
+
+Conjunto de módulos que trabalham de forma colaborativa para interpretar os comandos do usuário, gerar código e validar os resultados. Cada agente possui uma especialidade (desenvolvimento, design, gerenciamento de produto e testes) e atua em conjunto para produzir a solução final.
+
+3. Funcionalidades:
+
+Interface de Chat Intuitiva:
+
+Exibição de um chat completo com histórico, feedbacks visuais e a opção de escolher entre diferentes modelos de linguagem (LLM).
+
+Permite que o usuário insira comandos em linguagem natural para solicitar a criação de componentes, integrações, páginas completas ou outras funcionalidades.
+
+Geração de Código Automatizada:
+
+O agente desenvolvedor utiliza IA para interpretar os comandos do usuário e gerar código React de alta qualidade, que pode incluir componentes, hooks, serviços e integrações diversas.
+
+A extensão deve ser capaz de se conectar à documentação interna para garantir que o código siga os padrões técnicos e visuais definidos pela empresa.
+
+Integração com Bibliotecas e Frameworks Corporativos:
+
+Conexão com documentações e bibliotecas internas que orientem a comunicação entre microserviços e a aplicação do design system corporativo.
+
+Recursos de Segurança:
+
+Implementação de mecanismos para armazenamento seguro de API Keys, validação e sanitização de dados e código gerado, além de registros de logs e auditoria de ações.
+
+Cobertura de Testes:
+
+A extensão deve incorporar um agente de testes que garanta que o código gerado atinja, no mínimo, 80% de cobertura, aumentando a robustez e qualidade do software.
+
+4. Configuração:
+Requisitos:
+
+Visual Studio Code (versão 1.60.0 ou superior)
+
+Node.js (versão 14.x ou superior)
+
+API Key da OpenAI
+
+Git (opcional)
+
+NPM ou Yarn
+
+Procedimento de Instalação:
+
+Clonar o repositório do PS Copilot.
+
+Instalar as dependências necessárias.
+
+Compilar o projeto.
+
+Configurar a API Key e outros parâmetros (como modelo de linguagem, temperatura, máximo de tokens e timeout) por meio das configurações do VSCode.
+
+5. Uso:
+
+Acesso:
+
+A extensão deve ser acessível via ícone do PS Copilot na barra de atividades ou pelo comando "Abrir PS Copilot Chat" (Ctrl+Shift+P).
+
+Interação:
+
+A interface de chat exibirá um histórico completo, feedbacks em tempo real durante o processamento e a opção para selecionar o LLM desejado.
+
+Os usuários poderão inserir comandos em linguagem natural para solicitar a criação de componentes, integrações, páginas completas ou outras funcionalidades, e o agente desenvolvedor utilizará IA – em conjunto com a documentação interna – para gerar o código adequado.
+
+6. Desenvolvimento:
+
+Scripts e Ferramentas:
+
+O projeto deverá incluir scripts para compilação, execução em modo watch, linting, testes e geração de pacotes.
+
+Ferramentas de teste (como Jest ou similares) serão utilizadas para assegurar a qualidade do código por meio de testes unitários, de integração e de interface.
+
+Integração Contínua:
+
+O agente de testes deverá ser integrado ao pipeline de CI/CD para monitorar a cobertura dos testes e garantir que ela permaneça acima do mínimo estabelecido.
+
+7. Estrutura Multiagentes:
+A extensão PS Copilot será composta por vários agentes especializados que colaboram de forma integrada:
+
+Núcleo Coordenador:
+
+Recebe os comandos do usuário, distribui as tarefas entre os agentes e consolida os resultados para formar uma resposta unificada.
+
+Agente Desenvolvedor Especialista:
+
+Utiliza IA para converter os requisitos técnicos em código React de alta qualidade, integrando a documentação e bibliotecas internas para assegurar a aderência aos padrões corporativos.
+
+Agente de Design Especialista:
+
+Garante que os componentes gerados estejam de acordo com o design system e as diretrizes visuais da empresa, propondo layouts e ajustes visuais conforme necessário.
+
+Agente Product Manager Especialista:
+
+Valida que as funcionalidades geradas estejam alinhadas com os objetivos estratégicos do negócio, priorizando as demandas conforme o roadmap do produto.
+
+Agente de Testes:
+
+Responsável por gerar e executar suites de testes automatizados, monitorando a cobertura e garantindo que o código atinja, no mínimo, 80% de cobertura de testes.
+
+8. Especificações dos Agentes de Testes:
+O agente de testes deve incorporar as seguintes funcionalidades:
+
+Geração Automática de Testes:
+
+Criar automaticamente testes unitários, de integração e de interface para todo o código gerado.
+
+Monitoramento de Cobertura:
+
+Verificar continuamente a cobertura dos testes, utilizando ferramentas como Jest, Istanbul ou equivalentes, e garantir que a cobertura mínima seja de 80%.
+
+Feedback Detalhado:
+
+Fornecer relatórios e alertas aos desenvolvedores sobre áreas que possam necessitar de testes adicionais.
+
+Integração com CI/CD:
+
+Automatizar a validação dos testes como parte do pipeline de integração contínua, assegurando a manutenção da qualidade do código gerado.

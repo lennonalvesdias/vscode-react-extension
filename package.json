@@ -1,74 +1,109 @@
 {
-    "name": "vscode-react-chat",
-    "displayName": "React Chat",
-    "description": "Assistente de desenvolvimento React com chat",
-    "version": "0.0.1",
-    "engines": {
-        "vscode": "^1.85.0"
-    },
-    "categories": [
-        "Other"
+  "name": "ps-copilot",
+  "displayName": "PS Copilot",
+  "description": "Assistente de desenvolvimento React com múltiplos agentes especializados",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:psCopilot.openChat",
+    "onCommand:psCopilot.manageAgents",
+    "onCommand:psCopilot.configureApiKey",
+    "onView:psCopilot.chatView"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "psCopilot.openChat",
+        "title": "Abrir PS Copilot Chat"
+      },
+      {
+        "command": "psCopilot.manageAgents",
+        "title": "Gerenciar Agentes do PS Copilot"
+      },
+      {
+        "command": "psCopilot.configureApiKey",
+        "title": "Configurar API Key do PS Copilot"
+      }
     ],
-    "activationEvents": [],
-    "main": "./out/extension.js",
-    "contributes": {
-        "viewsContainers": {
-            "activitybar": [
-                {
-                    "id": "reactChat",
-                    "title": "React Chat",
-                    "icon": "resources/icon.svg"
-                }
-            ]
-        },
-        "views": {
-            "reactChat": [
-                {
-                    "type": "webview",
-                    "id": "reactChatView",
-                    "name": "React Chat"
-                }
-            ]
-        },
-        "configuration": {
-            "title": "React Chat",
-            "properties": {
-                "reactChat.openaiApiKey": {
-                    "type": "string",
-                    "default": "",
-                    "description": "Chave da API do OpenAI para o assistente React"
-                }
-            }
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "psCopilot",
+          "title": "PS Copilot",
+          "icon": "media/icon.svg"
         }
+      ]
     },
-    "scripts": {
-        "vscode:prepublish": "npm run compile",
-        "compile": "tsc -p ./",
-        "watch": "tsc -watch -p ./",
-        "pretest": "npm run compile && npm run lint",
-        "lint": "eslint src --ext ts",
-        "test": "node ./out/test/runTest.js",
-        "format": "prettier --write \"src/**/*.{ts,tsx}\"",
-        "package": "vsce package",
-        "publish": "vsce publish"
+    "views": {
+      "psCopilot": [
+        {
+          "id": "psCopilot.chatView",
+          "name": "Chat"
+        }
+      ]
     },
-    "devDependencies": {
-        "@types/glob": "^8.1.0",
-        "@types/mocha": "^10.0.6",
-        "@types/node": "20.x",
-        "@types/vscode": "^1.85.0",
-        "@typescript-eslint/eslint-plugin": "^6.15.0",
-        "@typescript-eslint/parser": "^6.15.0",
-        "@vscode/test-electron": "^2.3.8",
-        "eslint": "^8.56.0",
-        "glob": "^10.3.10",
-        "mocha": "^10.2.0",
-        "prettier": "^3.1.1",
-        "typescript": "^5.3.3",
-        "vsce": "^2.15.0"
-    },
-    "dependencies": {
-        "handlebars": "^4.7.8",
-        "openai": "^4.20.1"
+    "menus": {
+      "view/title": [
+        {
+          "command": "psCopilot.openChat",
+          "when": "view == psCopilot.chatView"
+        },
+        {
+          "command": "psCopilot.manageAgents",
+          "when": "view == psCopilot.chatView"
+        }
+      ]
     }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "build": "webpack --mode production",
+    "build:dev": "webpack --mode development",
+    "build:watch": "webpack --mode development --watch"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^5.16.5",
+    "@testing-library/react": "^12.1.5",
+    "@testing-library/user-event": "^14.4.3",
+    "@types/glob": "^7.1.3",
+    "@types/jest": "^29.5.0",
+    "@types/mocha": "^8.2.2",
+    "@types/node": "14.x",
+    "@types/react": "^17.0.0",
+    "@types/react-dom": "^17.0.0",
+    "@types/vscode": "^1.60.0",
+    "@typescript-eslint/eslint-plugin": "^4.26.0",
+    "@typescript-eslint/parser": "^4.26.0",
+    "css-loader": "^6.2.1",
+    "eslint": "^7.27.0",
+    "glob": "^7.1.7",
+    "identity-obj-proxy": "^3.0.0",
+    "jest": "^29.5.0",
+    "jest-environment-jsdom": "^29.5.0",
+    "mocha": "^8.4.0",
+    "style-loader": "^3.0.0",
+    "ts-jest": "^29.1.0",
+    "ts-loader": "^9.2.3",
+    "typescript": "^4.3.2",
+    "webpack": "^5.40.0",
+    "webpack-cli": "^4.7.2"
+  },
+  "dependencies": {
+    "openai": "^4.0.0",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2"
+  }
 }

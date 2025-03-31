@@ -1,0 +1,50 @@
+import * as vscode from 'vscode';
+import { Agent, AgentMessage, AgentContext, AnalysisResult, BusinessAlignment } from './types';
+import { OpenAIService } from '../services/OpenAIService';
+import { BusinessAnalysisService } from '../services/BusinessAnalysisService';
+
+export class ProductManagerAgent implements Agent {
+  private openAIService: OpenAIService;
+  private businessAnalysisService: BusinessAnalysisService;
+
+  constructor(private context: AgentContext) {
+    this.openAIService = new OpenAIService(context);
+    this.businessAnalysisService = new BusinessAnalysisService(context);
+  }
+
+  get name(): string {
+    return 'ProductManagerAgent';
+  }
+
+  get description(): string {
+    return 'Garante o alinhamento com os objetivos do negócio';
+  }
+
+  async process(message: AgentMessage): Promise<AgentMessage> {
+    try {
+      const analysis = await this.openAIService.analyzeRequest(message.content);
+      const alignment = await this.openAIService.analyzeBusinessAlignment(message.content);
+
+      return {
+        role: 'assistant',
+        type: 'response',
+        content: alignment,
+        metadata: {
+          analysis,
+          alignment: {
+            isAligned: alignment.includes('Score: 80') || alignment.includes('Score: 100'),
+            impact: 'medium',
+            recommendations: []
+          }
+        }
+      };
+    } catch (error) {
+      return {
+        role: 'assistant',
+        type: 'error',
+        content: `Erro na análise de negócio: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+        metadata: { error }
+      };
+    }
+  }
+}

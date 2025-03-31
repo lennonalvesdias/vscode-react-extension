@@ -1,64 +1,99 @@
-# React Chat
+# PS Copilot
 
-Uma extensão do VS Code que fornece um assistente de desenvolvimento React com chat. O assistente pode ajudar você a criar componentes, serviços e outros arquivos React com base em suas solicitações em linguagem natural.
+Assistente de desenvolvimento React com múltiplos agentes especializados para a plataforma Product Setup.
 
-## Recursos
+## Funcionalidades
 
-- Criação de componentes React com TypeScript ou JavaScript
-- Suporte para diferentes tipos de componentes:
-  - Formulários com validação
-  - Tabelas com paginação, busca, filtros e ordenação
-  - Páginas de autenticação
-- Geração automática de:
-  - Arquivos de estilo (CSS Modules)
-  - Arquivos de tipos (TypeScript)
-  - Serviços e endpoints
-- Interface de chat intuitiva
-- Suporte para comandos em português
-
-## Uso
-
-1. Abra a aba "React Chat" na barra lateral do VS Code
-2. Digite sua solicitação em português, por exemplo:
-   - "Criar um componente de tabela de usuários com paginação e busca"
-   - "Criar um formulário de cadastro de produtos"
-   - "Criar uma página de login"
-3. O assistente irá gerar os arquivos necessários com base na sua solicitação
-
-## Exemplos de Comandos
-
-- `criar componente de tabela de usuários com paginação e busca`
-- `criar formulário de cadastro de produtos com validação`
-- `criar página de login com autenticação`
-- `criar componente de lista de pedidos com filtros e ordenação`
+- Geração de código React de alta qualidade
+- Adesão ao design system
+- Alinhamento com objetivos de negócio
+- Testes automatizados
+- Análise de arquitetura
+- Verificação de performance
+- Garantia de segurança
+- Acessibilidade
+- Internacionalização
 
 ## Requisitos
 
-- VS Code 1.85.0 ou superior
-- Node.js e npm instalados
-- Projeto React existente (TypeScript ou JavaScript)
+- Visual Studio Code 1.60.0 ou superior
+- Node.js 14.x ou superior
+- NPM 6.x ou superior
+- OpenAI API Key
 
 ## Instalação
 
-1. Abra o VS Code
-2. Vá para a aba de extensões (Ctrl+Shift+X)
-3. Pesquise por "React Chat"
-4. Clique em "Instalar"
+1. Clone o repositório:
 
-## Configuração
+```bash
+git clone https://github.com/seu-usuario/ps-copilot.git
+cd ps-copilot
+```
 
-A extensão detecta automaticamente se seu projeto usa TypeScript ou JavaScript e gera os arquivos no formato apropriado.
+2. Instale as dependências:
 
-## Contribuição
+```bash
+npm install
+```
 
-Contribuições são bem-vindas! Por favor, siga estas etapas:
+3. Compile o projeto:
 
-1. Fork o repositório
-2. Crie uma branch para sua feature (`git checkout -b feature/MinhaFeature`)
-3. Faça commit das suas mudanças (`git commit -am 'Adiciona nova feature'`)
-4. Push para a branch (`git push origin feature/MinhaFeature`)
+```bash
+npm run compile
+```
+
+4. Configure a API Key:
+
+- Pressione `Ctrl+Shift+P` (ou `Cmd+Shift+P` no Mac)
+- Digite "Configurar API Key do PS Copilot"
+- Insira sua OpenAI API Key
+
+## Desenvolvimento
+
+1. Inicie o modo de desenvolvimento:
+
+```bash
+npm run build:watch
+```
+
+2. Pressione F5 no VS Code para iniciar a extensão em modo de depuração
+
+## Uso
+
+1. Abra o chat:
+
+- Pressione `Ctrl+Shift+P` (ou `Cmd+Shift+P` no Mac)
+- Digite "Abrir PS Copilot Chat"
+- Ou clique no ícone do PS Copilot na barra lateral
+
+2. Gerencie os agentes:
+
+- Pressione `Ctrl+Shift+P` (ou `Cmd+Shift+P` no Mac)
+- Digite "Gerenciar Agentes do PS Copilot"
+- Selecione os agentes que deseja ativar/desativar
+
+3. Digite sua mensagem no chat e aguarde a resposta dos agentes
+
+## Agentes Disponíveis
+
+- **DeveloperAgent**: Gera código React de alta qualidade
+- **DesignAgent**: Garante adesão ao design system
+- **ProductManagerAgent**: Alinha funcionalidades com objetivos de negócio
+- **TestAgent**: Garante qualidade dos testes
+- **ArchitectureAgent**: Mantém consistência arquitetural
+- **PerformanceAgent**: Garante performance dos componentes
+- **SecurityAgent**: Garante segurança dos componentes
+- **AccessibilityAgent**: Garante acessibilidade dos componentes
+- **InternationalizationAgent**: Garante internacionalização dos componentes
+
+## Contribuindo
+
+1. Faça um fork do repositório
+2. Crie uma branch para sua feature (`git checkout -b feature/nova-feature`)
+3. Commit suas mudanças (`git commit -am 'Adiciona nova feature'`)
+4. Push para a branch (`git push origin feature/nova-feature`)
 5. Crie um Pull Request
 
 ## Licença
 
-MIT 
+Este projeto está licenciado sob a licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
