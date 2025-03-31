@@ -1,14 +1,31 @@
 import * as vscode from 'vscode';
 
+interface ChatMessage {
+  text: string;
+  sender: 'user' | 'assistant';
+  timestamp: Date;
+}
+
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'psCopilot.chatView';
 
   private _view?: vscode.WebviewView;
-  private _messages: Array<{ text: string; sender: string }> = [];
+  private _messages: ChatMessage[] = [];
+  private _selectedModel = 'gpt-3.5-turbo';
+  private _availableModels = [
+    'gpt-3.5-turbo',
+    'gpt-4',
+    'gpt-4-turbo',
+    'gpt-4o'
+  ];
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
-  ) { }
+    private readonly _context: vscode.ExtensionContext
+  ) {
+    // Carregar modelo selecionado das configurações
+    this._selectedModel = this._context.globalState.get<string>('selectedModel') || 'gpt-3.5-turbo';
+  }
 
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -23,7 +40,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     };
 
     // Defina um título para a view
-    webviewView.description = "Chat com agentes especializados";
+    webviewView.description = "Assistente com múltiplos agentes";
 
     // Renderize o HTML da view
     this._updateWebview();
@@ -34,19 +51,26 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           case 'sendMessage':
             try {
               // Adiciona a mensagem do usuário
-              this._messages.push({
+              const userMessage: ChatMessage = {
                 text: message.text,
-                sender: 'user'
-              });
+                sender: 'user',
+                timestamp: new Date()
+              };
+              this._messages.push(userMessage);
+
+              // Atualiza o HTML para mostrar a mensagem do usuário
+              this._updateWebview();
 
               // Processa a mensagem
               const response = await this._processMessage(message.text);
 
               // Adiciona a resposta do assistente
-              this._messages.push({
+              const assistantMessage: ChatMessage = {
                 text: response,
-                sender: 'assistant'
-              });
+                sender: 'assistant',
+                timestamp: new Date()
+              };
+              this._messages.push(assistantMessage);
 
               // Atualiza o HTML do webview
               this._updateWebview();
@@ -54,14 +78,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               vscode.window.showErrorMessage('Erro ao processar mensagem: ' + error);
             }
             break;
+          case 'clearChat':
+            this._messages = [];
+            this._updateWebview();
+            break;
+          case 'changeModel':
+            this._selectedModel = message.model;
+            this._context.globalState.update('selectedModel', this._selectedModel);
+            vscode.window.showInformationMessage(`Modelo alterado para: ${this._selectedModel}`);
+            this._updateWebview();
+            break;
         }
       }
     );
   }
 
   private async _processMessage(text: string): Promise<string> {
-    // Mensagem simples para testes
-    return `Mensagem recebida: "${text}". Esta é uma resposta de teste.`;
+    // Simula processamento com delay para mostrar feedback visual
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    return `Processado usando ${this._selectedModel}: "${text}".\nEsta é uma resposta de exemplo. No futuro, este texto será substituído com conteúdo real dos agentes.`;
   }
 
   private _updateWebview() {
@@ -71,109 +106,299 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private _getHtmlForWebview() {
-    // Estilos CSS para o chat
+    // Estilos CSS para o chat (inspirado no GitHub Copilot)
     const styleContent = `
+      :root {
+        --vscode-foreground: var(--vscode-editor-foreground);
+        --vscode-background: var(--vscode-editor-background);
+        --vscode-border: var(--vscode-panel-border);
+        --copilot-blue: #0078d4;
+        --message-bg-user: var(--vscode-editor-inactiveSelectionBackground);
+        --message-bg-assistant: var(--vscode-editorWidget-background);
+        --input-bg: var(--vscode-input-background);
+        --input-fg: var(--vscode-input-foreground);
+        --button-bg: var(--copilot-blue);
+        --button-fg: white;
+        --border-color: var(--vscode-panel-border);
+      }
+
       body {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
         padding: 0;
         margin: 0;
+        background-color: var(--vscode-background);
+        color: var(--vscode-foreground);
         display: flex;
         flex-direction: column;
         height: 100vh;
+        overflow: hidden;
       }
+
+      .chat-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .model-selector {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .model-selector select {
+        background-color: var(--input-bg);
+        color: var(--input-fg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        padding: 4px 8px;
+      }
+
+      .chat-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .icon-button {
+        background: none;
+        border: none;
+        color: var(--vscode-foreground);
+        cursor: pointer;
+        padding: 4px;
+        opacity: 0.7;
+      }
+
+      .icon-button:hover {
+        opacity: 1;
+      }
+
       .chat-container {
         display: flex;
         flex-direction: column;
         height: 100vh;
-        max-width: 100%;
-        margin: 0 auto;
       }
+
       .messages-container {
         flex: 1;
         overflow-y: auto;
         padding: 16px;
         display: flex;
         flex-direction: column;
+        gap: 12px;
       }
+
       .message {
-        margin-bottom: 12px;
-        padding: 8px 12px;
-        border-radius: 8px;
-        max-width: 80%;
+        display: flex;
+        max-width: 100%;
         word-wrap: break-word;
       }
+
+      .message-content {
+        padding: 10px 14px;
+        border-radius: 6px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
+
       .user-message {
-        background-color: #007acc;
-        color: white;
-        align-self: flex-end;
+        justify-content: flex-end;
       }
+
+      .user-message .message-content {
+        background-color: var(--message-bg-user);
+        border-top-right-radius: 2px;
+      }
+
       .assistant-message {
-        background-color: #f1f1f1;
-        color: #333;
-        align-self: flex-start;
+        justify-content: flex-start;
       }
+
+      .assistant-message .message-content {
+        background-color: var(--message-bg-assistant);
+        border-top-left-radius: 2px;
+      }
+
+      .message-time {
+        font-size: 11px;
+        margin-top: 4px;
+        opacity: 0.6;
+        text-align: right;
+      }
+
       .input-container {
         display: flex;
-        padding: 10px;
-        border-top: 1px solid #ddd;
-        background-color: #f9f9f9;
+        padding: 12px;
+        border-top: 1px solid var(--border-color);
+        background-color: var(--vscode-background);
       }
-      .input-container input {
+
+      .input-textarea {
         flex: 1;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
+        padding: 10px 12px;
+        background-color: var(--input-bg);
+        color: var(--input-fg);
+        border: 1px solid var(--border-color);
         border-radius: 4px;
-        margin-right: 8px;
+        resize: none;
+        min-height: 20px;
+        max-height: 120px;
+        font-family: inherit;
+        line-height: 1.5;
       }
-      .input-container button {
-        padding: 8px 16px;
-        background-color: #007acc;
-        color: white;
+
+      .input-textarea:focus {
+        outline: 1px solid var(--copilot-blue);
+      }
+
+      .send-button {
+        padding: 6px 12px;
+        margin-left: 8px;
+        background-color: var(--button-bg);
+        color: var(--button-fg);
         border: none;
         border-radius: 4px;
         cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
-      .input-container button:hover {
-        background-color: #005999;
+
+      .send-button:hover {
+        opacity: 0.9;
       }
-      .input-container button:disabled {
-        background-color: #cccccc;
+
+      .send-button:disabled {
+        opacity: 0.5;
         cursor: not-allowed;
+      }
+
+      .typing-indicator {
+        display: flex;
+        gap: 4px;
+        padding: 8px 12px;
+        align-items: center;
+      }
+
+      .typing-indicator span {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: var(--vscode-foreground);
+        opacity: 0.5;
+        animation: typing 1s infinite ease-in-out;
+      }
+
+      .typing-indicator span:nth-child(1) {
+        animation-delay: 0s;
+      }
+
+      .typing-indicator span:nth-child(2) {
+        animation-delay: 0.3s;
+      }
+
+      .typing-indicator span:nth-child(3) {
+        animation-delay: 0.6s;
+      }
+
+      @keyframes typing {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-5px); }
+      }
+
+      .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        gap: 16px;
+        opacity: 0.7;
+        padding: 16px;
+        text-align: center;
+      }
+
+      .empty-state h3 {
+        margin: 0;
+        margin-bottom: 8px;
+      }
+
+      .empty-state p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.5;
       }
     `;
 
     // Renderiza as mensagens
     let messagesHtml = '';
-    for (const message of this._messages) {
-      const messageClass = message.sender === 'user' ? 'user-message' : 'assistant-message';
-      messagesHtml += `
-        <div class="message ${messageClass}">
-          <div class="message-content">${this._escapeHtml(message.text)}</div>
+
+    if (this._messages.length === 0) {
+      messagesHtml = `
+        <div class="empty-state">
+          <h3>Bem-vindo ao PS Copilot</h3>
+          <p>
+            Assistente de desenvolvimento React com múltiplos agentes especializados.<br>
+            Faça perguntas sobre desenvolvimento, design, arquitetura ou testes.
+          </p>
         </div>
       `;
+    } else {
+      for (const message of this._messages) {
+        const messageClass = message.sender === 'user' ? 'user-message' : 'assistant-message';
+        const time = message.timestamp.toLocaleTimeString();
+
+        messagesHtml += `
+          <div class="message ${messageClass}">
+            <div>
+              <div class="message-content">${this._escapeHtml(message.text)}</div>
+              <div class="message-time">${time}</div>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // Cria o dropdown de modelos
+    let modelOptionsHtml = '';
+    for (const model of this._availableModels) {
+      const selected = model === this._selectedModel ? 'selected' : '';
+      modelOptionsHtml += `<option value="${model}" ${selected}>${model}</option>`;
     }
 
     // Script JavaScript para interação do chat
     const scriptContent = `
       const vscode = acquireVsCodeApi();
-      const messageInput = document.getElementById('messageInput');
-      const sendButton = document.getElementById('sendButton');
+
+      // Elementos do DOM
       const messagesContainer = document.getElementById('messages');
+      const textarea = document.getElementById('messageInput');
+      const sendButton = document.getElementById('sendButton');
+      const modelSelector = document.getElementById('modelSelector');
+      const clearButton = document.getElementById('clearButton');
+
+      // Ajusta altura do textarea conforme digitação
+      function adjustTextareaHeight() {
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+      }
 
       // Rolar para o final da conversa
       function scrollToBottom() {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
       }
 
-      // Rolar para o final inicialmente
+      // Inicialização
       scrollToBottom();
+      textarea.focus();
 
-      // Dar foco ao input
-      messageInput.focus();
+      // Eventos
+      textarea.addEventListener('input', adjustTextareaHeight);
 
-      // Handler para botão enviar
-      sendButton.addEventListener('click', () => {
-        const text = messageInput.value.trim();
+      // Enviar mensagem
+      function sendMessage() {
+        const text = textarea.value.trim();
 
         if (text) {
           vscode.postMessage({
@@ -181,21 +406,41 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             text: text
           });
 
-          // Limpar o input após enviar
-          messageInput.value = '';
-
-          // Focar no input novamente
-          messageInput.focus();
+          // Limpar e reajustar textarea
+          textarea.value = '';
+          textarea.style.height = 'auto';
+          textarea.focus();
         }
-      });
+      }
 
-      // Handler para tecla Enter
-      messageInput.addEventListener('keydown', (e) => {
+      // Handler para botão enviar
+      sendButton.addEventListener('click', sendMessage);
+
+      // Handler para tecla Enter (sem shift)
+      textarea.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
-          sendButton.click();
+          sendMessage();
         }
       });
+
+      // Alteração de modelo
+      modelSelector.addEventListener('change', (e) => {
+        vscode.postMessage({
+          command: 'changeModel',
+          model: e.target.value
+        });
+      });
+
+      // Limpar chat
+      clearButton.addEventListener('click', () => {
+        vscode.postMessage({
+          command: 'clearChat'
+        });
+      });
+
+      // Rolar para o final inicialmente
+      scrollToBottom();
     `;
 
     return `<!DOCTYPE html>
@@ -209,12 +454,38 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         </head>
         <body>
           <div class="chat-container">
+            <div class="chat-header">
+              <div class="model-selector">
+                <span>Modelo:</span>
+                <select id="modelSelector">
+                  ${modelOptionsHtml}
+                </select>
+              </div>
+              <div class="chat-actions">
+                <button id="clearButton" class="icon-button" title="Limpar conversa">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2 4H3H14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M5 4V2C5 1.73478 5.10536 1.48043 5.29289 1.29289C5.48043 1.10536 5.73478 1 6 1H10C10.2652 1 10.5196 1.10536 10.7071 1.29289C10.8946 1.48043 11 1.73478 11 2V4M13 4V14C13 14.2652 12.8946 14.5196 12.7071 14.7071C12.5196 14.8946 12.2652 15 12 15H4C3.73478 15 3.48043 14.8946 3.29289 14.7071C3.10536 14.5196 3 14.2652 3 14V4H13Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
             <div class="messages-container" id="messages">
               ${messagesHtml}
             </div>
             <div class="input-container">
-              <input type="text" id="messageInput" placeholder="Digite sua mensagem...">
-              <button id="sendButton">Enviar</button>
+              <textarea
+                id="messageInput"
+                class="input-textarea"
+                placeholder="Digite sua mensagem..."
+                rows="1"
+              ></textarea>
+              <button id="sendButton" class="send-button">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M14.6668 1.33333L7.3335 8.66666" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M14.6668 1.33333L10.0002 14.6667L7.3335 8.66666L1.3335 6L14.6668 1.33333Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
             </div>
           </div>
           <script>${scriptContent}</script>

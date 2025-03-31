@@ -8,7 +8,7 @@ export function activate(context: vscode.ExtensionContext) {
   console.log('Ativando a extensão PS Copilot');
 
   // Registra o provedor da view do chat
-  const chatViewProvider = new ChatViewProvider(context.extensionUri);
+  const chatViewProvider = new ChatViewProvider(context.extensionUri, context);
 
   // Registra o provedor de webview
   const chatViewRegistration = vscode.window.registerWebviewViewProvider(
