@@ -107,13 +107,13 @@ export class SecurityService {
       throw new Error('API Key não pode estar vazia');
     }
 
-    // Verifica se a API Key começa com 'sk-' ou 'org-'
-    if (!trimmedInput.startsWith('sk-') && !trimmedInput.startsWith('org-')) {
-      throw new Error('API Key deve começar com "sk-" ou "org-"');
+    // Verifica se a API Key começa com 'sk-'
+    if (!trimmedInput.startsWith('sk-')) {
+      throw new Error('API Key deve começar com "sk-"');
     }
 
-    // Remove apenas caracteres que não são permitidos em uma API Key
-    return trimmedInput.replace(/[^a-zA-Z0-9\-_.]/g, '');
+    // Retorna a chave sem modificação, já que a OpenAI usa Base64 URL-safe que inclui caracteres como - _ .
+    return trimmedInput;
   }
 
   validateCode(code: string): boolean {
@@ -142,7 +142,8 @@ export class SecurityService {
 
   private encrypt(text: string): string {
     const iv = crypto.randomBytes(IV_LENGTH);
-    const cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY), iv);
+    const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
     let encrypted = cipher.update(text, 'utf8', 'hex');
     encrypted += cipher.final('hex');
     const authTag = cipher.getAuthTag();
@@ -153,7 +154,8 @@ export class SecurityService {
     const [ivHex, authTagHex, encryptedHex] = text.split(':');
     const iv = Buffer.from(ivHex, 'hex');
     const authTag = Buffer.from(authTagHex, 'hex');
-    const decipher = crypto.createDecipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY), iv);
+    const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
     decipher.setAuthTag(authTag);
     let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
