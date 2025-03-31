@@ -1,15 +1,11 @@
-import * as vscode from 'vscode';
 import { Agent, AgentMessage, AgentContext } from './types';
 import { OpenAIService } from '../services/OpenAIService';
-import { CodeGenerator } from '../services/CodeGenerator';
 
 export class DeveloperAgent implements Agent {
   private openAIService: OpenAIService;
-  private codeGenerator: CodeGenerator;
 
   constructor(private context: AgentContext) {
     this.openAIService = new OpenAIService(context);
-    this.codeGenerator = new CodeGenerator(context);
   }
 
   get name(): string {

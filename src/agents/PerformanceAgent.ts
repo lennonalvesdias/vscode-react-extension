@@ -1,15 +1,11 @@
-import * as vscode from 'vscode';
 import { Agent, AgentMessage, AgentContext } from './types';
 import { OpenAIService } from '../services/OpenAIService';
-import { PerformanceService } from '../services/PerformanceService';
 
 export class PerformanceAgent implements Agent {
   private openAIService: OpenAIService;
-  private performanceService: PerformanceService;
 
   constructor(private context: AgentContext) {
     this.openAIService = new OpenAIService(context);
-    this.performanceService = new PerformanceService(context);
   }
 
   get name(): string {

@@ -1,15 +1,11 @@
-import * as vscode from 'vscode';
 import { Agent, AgentMessage, AgentContext, AnalysisResult, DesignSystemCompliance } from './types';
 import { OpenAIService } from '../services/OpenAIService';
-import { DesignSystemService } from '../services/DesignSystemService';
 
 export class DesignAgent implements Agent {
   private openAIService: OpenAIService;
-  private designSystemService: DesignSystemService;
 
   constructor(private context: AgentContext) {
     this.openAIService = new OpenAIService(context);
-    this.designSystemService = new DesignSystemService(context);
   }
 
   get name(): string {
@@ -17,24 +13,25 @@ export class DesignAgent implements Agent {
   }
 
   get description(): string {
-    return 'Garante que os componentes estejam aderentes ao design system';
+    return 'Garante a aderência ao design system';
   }
 
   async process(message: AgentMessage): Promise<AgentMessage> {
     try {
-      // Analisa a solicitação usando IA
       const analysis = await this.openAIService.analyzeRequest(message.content);
-
-      // Verifica a aderência ao design system
-      const designSystemCompliance = await this.designSystemService.checkCompliance(analysis);
+      const compliance = await this.openAIService.analyzeDesignCompliance(message.content);
 
       return {
         role: 'assistant',
         type: 'response',
-        content: designSystemCompliance.recommendations.join('\n'),
+        content: compliance,
         metadata: {
           analysis,
-          compliance: designSystemCompliance
+          compliance: {
+            isCompliant: compliance.includes('Score: 80') || compliance.includes('Score: 100'),
+            violations: [],
+            suggestions: []
+          }
         }
       };
     } catch (error) {
