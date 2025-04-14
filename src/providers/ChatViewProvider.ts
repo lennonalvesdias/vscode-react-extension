@@ -32,18 +32,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private readonly _extensionUri: vscode.Uri,
     private readonly _context: vscode.ExtensionContext
   ) {
-    // Carregar modelo selecionado das configurações
     this._selectedModel = this._context.globalState.get<string>('selectedModel') || 'gpt-3.5-turbo';
 
-    // Carregar URL da API das configurações
     const config = vscode.workspace.getConfiguration('psCopilot');
     const customApiUrl = config.get<string>('apiUrl');
 
-    // Inicializar serviços
     const agentContext: AgentContext = {
-      apiKey: '', // Será carregado em _loadApiKey
+      apiKey: '',
       model: this._selectedModel,
-      apiUrl: customApiUrl || undefined, // Usar URL customizada ou undefined
+      apiUrl: customApiUrl || undefined,
       temperature: 0.7,
       maxTokens: 2000,
       timeout: 30000,
@@ -51,20 +48,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       extensionPath: _extensionUri.fsPath,
       globalState: _context.globalState,
       workspaceState: _context.workspaceState,
-      configuration: config // Passar a configuração lida
+      configuration: config
     };
 
     this._configService = new ConfigurationService(agentContext);
     this._openAIService = new OpenAIService(agentContext);
     this._codeGenerationService = new CodeGenerationService(agentContext);
 
-    // Carregar API Key (isso também recriará os serviços com a key)
     this._loadApiKey();
 
-    // Verificar se já tem API Key configurada
     this._configService.hasApiKey().then(hasApiKey => {
       if (!hasApiKey) {
-        // Adicionar mensagem de boas-vindas instruindo sobre a API Key
         this._messages.push({
           text: 'Bem-vindo ao PS Copilot! Para começar, você precisa configurar sua API Key da OpenAI. Clique no botão "Configurar API Key" quando aparecer na notificação ou use o comando "PS Copilot: Configurar API Key da OpenAI" na paleta de comandos (Ctrl+Shift+P).',
           sender: 'assistant',
@@ -73,22 +67,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
     });
 
-    // Escutar eventos de configuração da API Key
     onApiKeyConfigured(() => {
-      // Recarregar a API Key
       this._loadApiKey();
-
-      // Atualizar a interface para refletir que a API Key foi configurada
       this._updateWebview();
-
-      // Adicionar mensagem informativa
       this._messages.push({
         text: 'API Key configurada com sucesso! Agora você pode começar a fazer perguntas.',
         sender: 'assistant',
         timestamp: new Date()
       });
-
-      // Atualizar a interface novamente para mostrar a nova mensagem
       this._updateWebview();
     });
   }
@@ -96,13 +82,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private async _loadApiKey() {
     try {
       const apiKey = await this._configService.getApiKey();
-      // Carregar URL da API das configurações novamente
       const config = vscode.workspace.getConfiguration('psCopilot');
       const customApiUrl = config.get<string>('apiUrl');
 
-      // Atualizar agentContext com a API Key e a URL mais recente
       const agentContext: AgentContext = {
-        apiKey: apiKey || '', // Garante que apiKey não seja null
+        apiKey: apiKey || '',
         model: this._selectedModel,
         apiUrl: customApiUrl || undefined,
         temperature: 0.7,
@@ -115,7 +99,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         configuration: config
       };
 
-      // Atualizar/Recriar os serviços com o contexto atualizado
       this._openAIService = new OpenAIService(agentContext);
       this._codeGenerationService = new CodeGenerationService(agentContext);
 
@@ -141,10 +124,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       localResourceRoots: [this._extensionUri]
     };
 
-    // Defina um título para a view
-    webviewView.description = "Assistente com múltiplos agentes";
-
-    // Renderize o HTML da view
     await this._updateWebview();
 
     webviewView.webview.onDidReceiveMessage(
@@ -154,7 +133,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             try {
               if (this._isProcessing) { return; }
 
-              // Adiciona a mensagem do usuário
               const userMessage: ChatMessage = {
                 text: message.text,
                 sender: 'user',
@@ -162,17 +140,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               };
               this._messages.push(userMessage);
 
-              // Atualiza o HTML para mostrar a mensagem do usuário
               await this._updateWebview();
 
-              // Define o estado como processando
               this._isProcessing = true;
               await this._updateWebview();
 
-              // Processa a mensagem
               const response = await this._processMessage(message.text);
 
-              // Adiciona a resposta do assistente
               const assistantMessage: ChatMessage = {
                 text: response,
                 sender: 'assistant',
@@ -180,10 +154,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               };
               this._messages.push(assistantMessage);
 
-              // Define o estado como não processando
               this._isProcessing = false;
 
-              // Atualiza o HTML do webview
               await this._updateWebview();
             } catch (error) {
               this._isProcessing = false;
@@ -211,10 +183,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private async _processMessage(text: string): Promise<string> {
     try {
-      // Verifica se tem API Key
       const apiKey = await this._configService.getApiKey();
       if (!apiKey) {
-        // Avisa o usuário na interface e oferece um botão para configurar a API Key
         vscode.window.showErrorMessage(
           'API Key da OpenAI não configurada',
           'Configurar API Key'
@@ -227,17 +197,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         return 'API Key não configurada. Por favor, clique no botão "Configurar API Key" na notificação acima ou use o comando "PS Copilot: Configurar API Key da OpenAI" na paleta de comandos (Ctrl+Shift+P).';
       }
 
-      // Verifica se a mensagem é um pedido para gerar código
       if (this._isCodeGenerationRequest(text)) {
         return await this._handleCodeGeneration(text);
       }
 
-      // Processa a mensagem com o OpenAI
       return await this._openAIService.chat(text);
     } catch (error) {
       console.error('Erro ao processar mensagem:', error);
 
-      // Se o erro for de API Key não configurada, mostra a opção de configurar
       if (error instanceof Error && error.message.includes('API Key não configurada')) {
         vscode.window.showErrorMessage(
           'API Key da OpenAI não configurada',
@@ -253,13 +220,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  /**
-   * Verifica se a mensagem é uma solicitação de geração de código
-   */
   private _isCodeGenerationRequest(text: string): boolean {
     const lowerText = text.toLowerCase();
 
-    // Padrões de frases que indicam solicitação de geração de código
     const codeGenPatterns = [
       'crie um componente',
       'criar componente',
@@ -297,19 +260,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     return codeGenPatterns.some(pattern => lowerText.includes(pattern));
   }
 
-  /**
-   * Processa a solicitação de geração de código
-   */
   private async _handleCodeGeneration(text: string): Promise<string> {
     try {
-      // Verificar se tem API Key configurada
       const apiKey = await this._configService.getApiKey();
-      // Carregar URL da API das configurações
       const config = vscode.workspace.getConfiguration('psCopilot');
       const customApiUrl = config.get<string>('apiUrl');
 
       if (!apiKey) {
-        // Mostrar opção para configurar a API Key
         vscode.window.showErrorMessage(
           'API Key da OpenAI não configurada',
           'Configurar API Key'
@@ -322,12 +279,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         return 'Não foi possível gerar o código porque a API Key não está configurada. Por favor, clique no botão "Configurar API Key" na notificação acima ou use o comando "PS Copilot: Configurar API Key da OpenAI" na paleta de comandos (Ctrl+Shift+P).';
       }
 
-      // Verificar se há um workspace aberto
       if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
         return 'Não foi possível gerar o código porque nenhum workspace está aberto. Abra um projeto para gerar código.';
       }
 
-      // Assegurar que os serviços tenham o contexto mais recente
       const agentContext: AgentContext = {
         apiKey: apiKey,
         model: this._selectedModel,
@@ -342,7 +297,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         configuration: config
       };
 
-      // Recria os serviços com o contexto atualizado
       this._openAIService = new OpenAIService(agentContext);
       this._codeGenerationService = new CodeGenerationService(agentContext);
 
@@ -355,7 +309,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
       console.log(`Identificados ${artifacts.length} artefatos para geração`);
 
-      // Solicitar confirmação do usuário
       let confirmationMessage = `Vou gerar os seguintes artefatos com base na sua descrição:\n`;
       artifacts.forEach(artifact => {
         confirmationMessage += `- ${artifact.type}: ${artifact.name}\n`;
@@ -373,10 +326,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
       console.log('Iniciando geração dos artefatos');
 
-      // Resultados de todos os artefatos gerados
       let allFiles: Array<{ path: string; content: string }> = [];
 
-      // Gerar cada artefato
       for (const artifact of artifacts) {
         console.log(`Gerando artefato: ${artifact.type} - ${artifact.name}`);
 
@@ -396,7 +347,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
       }
 
-      // Lista de arquivos gerados
       const fileList = allFiles.map(file => `- ${file.path}`).join('\n');
 
       console.log('Geração de código concluída com sucesso');
@@ -405,7 +355,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     } catch (error) {
       console.error('Erro na geração de código:', error);
 
-      // Se o erro for de API Key não configurada, mostrar opção para configurar
       if (error instanceof Error && error.message.includes('API Key não configurada')) {
         vscode.window.showErrorMessage(
           'API Key da OpenAI não configurada',
@@ -423,50 +372,35 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  /**
-   * Identifica os artefatos necessários com base na descrição do usuário
-   */
   private _identifyRequiredArtifacts(
     text: string
   ): Array<{ type: 'component' | 'hook' | 'service' | 'page', name: string, path?: string }> {
     const lowerText = text.toLowerCase();
     const artifacts: Array<{ type: 'component' | 'hook' | 'service' | 'page', name: string, path?: string }> = [];
 
-    // Simplificar a lógica para depender menos do analysisResult (que agora é {})
-    // A lógica existente já tem fallbacks que usam o texto, então deve funcionar.
-    // Idealmente, esta função poderia ser refatorada ou substituída por uma análise mais robusta no futuro.
-
-    // Exemplo: Usar o fallback de análise de texto primeiro
-    let mainType: 'component' | 'hook' | 'service' | 'page' = 'component'; // Default
+    let mainType: 'component' | 'hook' | 'service' | 'page' = 'component';
     if (lowerText.includes('página') || lowerText.includes(' page')) {
       mainType = 'page';
     } else if (lowerText.includes('serviço') || lowerText.includes(' service')) {
       mainType = 'service';
-    } else if (lowerText.includes(' hook') || lowerText.includes(' custom hook')) { // Mais específico para hook
+    } else if (lowerText.includes(' hook') || lowerText.includes(' custom hook')) {
       mainType = 'hook';
     } else if (lowerText.includes('componente') || lowerText.includes(' component')) {
       mainType = 'component';
     }
 
-    const mainName = this._extractNameFromText(text, mainType) || (mainType.charAt(0).toUpperCase() + mainType.slice(1)); // Nome baseado no tipo ou extraído
+    const mainName = this._extractNameFromText(text, mainType) || (mainType.charAt(0).toUpperCase() + mainType.slice(1));
     artifacts.push({ type: mainType, name: mainName });
 
-    // Adicionar lógica simplificada para detectar serviços ou hooks relacionados (se necessário)
     if (mainType === 'page' && (lowerText.includes('serviço') || lowerText.includes(' service') || lowerText.includes(' api') || lowerText.includes(' dados'))) {
-      // Se a página menciona serviço/api/dados, adicionar um serviço relacionado
       if (!artifacts.some(a => a.type === 'service')) {
-        let serviceName = `${mainName}Service`; // Nome baseado na página
+        let serviceName = `${mainName}Service`;
         if (lowerText.includes('login') || lowerText.includes('auth')) { serviceName = 'AuthService'; }
         if (lowerText.includes('user') || lowerText.includes('usuário')) { serviceName = 'UserService'; }
         artifacts.push({ type: 'service', name: serviceName });
       }
     }
-    // Adicionar outras lógicas de detecção simplificadas conforme necessário
 
-    // Manter a lógica de fallback restante que usa lowerText
-    // ... (código existente para detectar page+service, hooks)
-
-    // Garantir que pelo menos um artefato seja retornado (a lógica acima já faz isso)
     if (artifacts.length === 0) {
       console.warn("Nenhum artefato identificado em _identifyRequiredArtifacts, retornando componente padrão.");
       artifacts.push({ type: 'component', name: 'MyComponent' });
@@ -475,13 +409,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     return artifacts;
   }
 
-  /**
-   * Tenta extrair um nome de componente a partir do texto
-   */
   private _extractNameFromText(text: string, type: string): string {
     const lowerText = text.toLowerCase();
 
-    // Padrões para extração baseados no tipo
     let patterns: RegExp[] = [];
 
     switch (type) {
@@ -515,16 +445,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         break;
     }
 
-    // Tentar cada padrão
     for (const pattern of patterns) {
       const match = text.match(pattern);
       if (match && match[1]) {
-        // Capitalizar a primeira letra
         return match[1].charAt(0).toUpperCase() + match[1].slice(1);
       }
     }
 
-    // Extrair algumas palavras-chave comuns
     if (lowerText.includes('login')) { return 'Login'; }
     if (lowerText.includes('cadastro')) { return 'Cadastro'; }
     if (lowerText.includes('perfil')) { return 'Profile'; }
@@ -534,17 +461,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     if (lowerText.includes('formulário')) { return 'Form'; }
     if (lowerText.includes('autenticação')) { return 'Auth'; }
 
-    // Retornar null se não encontrar
     return '';
   }
 
-  /**
-   * Cria uma descrição detalhada para o artefato
-   */
   private _createArtifactDescription(text: string, artifact: { type: string, name: string }): string {
     let description = text;
 
-    // Adicionar contexto específico para o artefato
     if (artifact.type === 'service' && text.toLowerCase().includes('página') &&
       !text.toLowerCase().includes('serviço')) {
       description += ` Este serviço deve fornecer as funcionalidades de backend necessárias para a página ${artifact.name}.`;
@@ -565,7 +487,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async _getHtmlForWebview() {
-    // Estilos CSS para o chat (inspirado no GitHub Copilot)
     const styleContent = `
       :root {
         --vscode-foreground: var(--vscode-editor-foreground);
@@ -808,10 +729,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
     `;
 
-    // Adiciona estilos para o estado vazio se tiver API Key
     const hasApiKey = await this._configService.hasApiKey();
 
-    // Renderiza as mensagens
     let messagesHtml = '';
 
     if (this._messages.length === 0) {
@@ -850,7 +769,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
     }
 
-    // Adiciona indicador de digitação se estiver processando
     if (this._isProcessing) {
       messagesHtml += `
         <div class="message assistant-message">
@@ -867,18 +785,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       `;
     }
 
-    // Cria o dropdown de modelos
     let modelOptionsHtml = '';
     for (const model of this._availableModels) {
       const selected = model === this._selectedModel ? 'selected' : '';
       modelOptionsHtml += `<option value="${model}" ${selected}>${model}</option>`;
     }
 
-    // Script JavaScript para interação do chat
     const scriptContent = `
       const vscode = acquireVsCodeApi();
 
-      // Elementos do DOM
       const messagesContainer = document.getElementById('messages');
       const textarea = document.getElementById('messageInput');
       const sendButton = document.getElementById('sendButton');
@@ -886,25 +801,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       const clearButton = document.getElementById('clearButton');
       const configApiKeyBtn = document.getElementById('configApiKeyBtn');
 
-      // Ajusta altura do textarea conforme digitação
       function adjustTextareaHeight() {
         textarea.style.height = 'auto';
         textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
       }
 
-      // Rolar para o final da conversa
       function scrollToBottom() {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
       }
 
-      // Inicialização
       scrollToBottom();
       textarea.focus();
 
-      // Eventos
       textarea.addEventListener('input', adjustTextareaHeight);
 
-      // Enviar mensagem
       function sendMessage() {
         const text = textarea.value.trim();
 
@@ -914,17 +824,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             text: text
           });
 
-          // Limpar e reajustar textarea
           textarea.value = '';
           textarea.style.height = 'auto';
           textarea.focus();
         }
       }
 
-      // Handler para botão enviar
       sendButton.addEventListener('click', sendMessage);
 
-      // Handler para tecla Enter (sem shift)
       textarea.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
@@ -932,7 +839,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
       });
 
-      // Alteração de modelo
       modelSelector.addEventListener('change', (e) => {
         vscode.postMessage({
           command: 'changeModel',
@@ -940,17 +846,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         });
       });
 
-      // Limpar chat
       clearButton.addEventListener('click', () => {
         vscode.postMessage({
           command: 'clearChat'
         });
       });
 
-      // Rolar para o final inicialmente
       scrollToBottom();
 
-      // Configurar API Key
       if (configApiKeyBtn) {
         configApiKeyBtn.addEventListener('click', () => {
           vscode.postMessage({

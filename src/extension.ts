@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { ChatViewProvider } from './providers/ChatViewProvider';
-import { registerConfigureApiKeyCommand as _registerConfigureApiKeyCommand } from './commands/configureApiKey';
 import { registerSelectLLMModelCommand } from './commands/selectLLMModel';
 import { ConfigurationService } from './services/ConfigurationService';
 
@@ -9,7 +8,7 @@ const apiKeyConfigEvent = new vscode.EventEmitter<void>();
 export const onApiKeyConfigured = apiKeyConfigEvent.event;
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('Ativando a extensão PS Copilot');
+  console.log('PS Copilot está ativo!');
 
   // Cria contexto para os agentes
   const agentContext = {
@@ -98,8 +97,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(openChatInExplorerCommand);
 
-  // Registra os outros comandos
-  _registerConfigureApiKeyCommand(context);
+  // Registrar apenas o comando selectLLMModel via função importada
   registerSelectLLMModelCommand(context);
 
   // Adiciona os comandos ao contexto de subscrições
