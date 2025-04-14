@@ -39,16 +39,14 @@ export class CodeGenerationService {
   private developerAgent: DeveloperAgent;
   private testAgent: TestAgent;
   private designAgent: DesignAgent;
-  private context: AgentContext;
 
   constructor(context: AgentContext) {
-    this.context = context;
     this.openAIService = new OpenAIService(context);
     this.fileService = new FileService();
 
-    this.developerAgent = new DeveloperAgent(this.openAIService, context);
-    this.testAgent = new TestAgent(this.openAIService, context);
-    this.designAgent = new DesignAgent(this.openAIService, context);
+    this.developerAgent = new DeveloperAgent(this.openAIService);
+    this.testAgent = new TestAgent(this.openAIService);
+    this.designAgent = new DesignAgent(this.openAIService);
   }
 
   /**

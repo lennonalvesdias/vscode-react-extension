@@ -62,15 +62,18 @@ A extensão segue uma arquitetura baseada em componentes do VS Code e serviços 
 - **Configuração de URL da API OpenAI:**
   - Configuração `psCopilot.apiUrl` nas configurações do VS Code permite definir uma URL personalizada (útil para proxies). Se vazia, usa a URL padrão da OpenAI.
 - **Geração de Código via Prompt:**
-  - Detecção de intenção de geração de código a partir da mensagem do usuário (ex: "crie um componente", "gere uma página").
-  - Análise da solicitação via OpenAI (`analyzeRequest`) para identificar o tipo principal (página, componente, hook, serviço), nome sugerido e componentes relacionados (como um serviço para uma página).
+  - Detecção de intenção de geração de código a partir da mensagem do usuário (`_isCodeGenerationRequest`).
+  - Identificação do(s) artefato(s) a ser(em) criado(s) (tipo, nome) diretamente da mensagem do usuário dentro do `ChatViewProvider` (`_identifyRequiredArtifacts`).
   - Confirmação do usuário antes da geração, listando os artefatos que serão criados.
-  - Geração de múltiplos artefatos (ex: página + serviço) com base na análise.
+  - Orquestração da geração multiagente via `CodeGenerationService`:
+    - `DeveloperAgent` gera o código principal.
+    - `TestAgent` gera os testes.
+    - `DesignAgent` analisa a conformidade.
   - Criação dos arquivos correspondentes no workspace usando `FileService`.
-  - Abertura automática dos arquivos gerados no editor.
+  - Abertura automática do arquivo principal gerado no editor.
   - Feedback na interface sobre o sucesso ou falha da geração.
-  - **Integração Parcial com Soma DS:** O prompt de geração de código agora inclui as diretrizes básicas e a lista de componentes do Soma DS (extraído de `soma.txt`).
-  - **Ferramentas Simuladas:** O prompt instrui a IA a _agir como se_ usasse ferramentas `icon-list` e `component-documentation`, pois elas não existem na extensão.
+  - **Integração com Soma DS:** Os prompts dos agentes incluem diretrizes e a lista de componentes Soma.
+  - **Ferramentas Simuladas:** O prompt do `DeveloperAgent` instrui a IA a _agir como se_ usasse ferramentas `icon-list` e `component-documentation`.
 - **Ícones Personalizados:**
   - Ícone principal (barra de atividades): Desenho de um mosqueteiro.
   - Ícone secundário (explorer view): Desenho de um balão de chat.
@@ -91,15 +94,20 @@ A extensão segue uma arquitetura baseada em componentes do VS Code e serviços 
 
 ## 5. Evolução e Decisões Recentes
 
-- **Remoção do Formulário de Geração:** O formulário dedicado para gerar código foi removido. A geração agora é acionada pela análise do prompt do usuário.
-- **Refatoração do `FileService`:** O serviço foi modificado para usar exclusivamente a API `vscode.workspace.fs` do VS Code, eliminando dependências diretas dos módulos `fs` e `path` do Node.js, o que resolveu problemas de compilação com Webpack.
-- **Melhoria na Detecção de Solicitações:** A lógica para identificar se uma mensagem do usuário é um pedido de geração de código foi expandida (`_isCodeGenerationRequest`, `_identifyRequiredArtifacts`).
-- **Análise de Solicitação Aprimorada:** O `OpenAIService.analyzeRequest` foi melhorado para extrair mais detalhes e estrutura da solicitação do usuário, incluindo componentes relacionados.
-- **Correção de API Key:** Implementadas verificações robustas e sincronização da API Key para evitar erros durante a geração de código.
-- **Atualização de Ícones:** Os ícones da extensão foram redesenhados para refletir o tema "mosqueteiro" (PS Copilot -> "Product Setup" Copilot).
-- **Integração do Design System Soma:** As regras e a lista de componentes do Soma (definidas em `soma.txt`) foram incorporadas aos prompts de geração de código do `CodeGenerationService` para melhorar a aderência do código gerado.
-- **Identificação da Necessidade de Agente de Design:** A análise do `soma.txt` (`BeautifyPrompt`) reforçou a necessidade futura de um agente especializado em design para garantir a qualidade visual e aderência ao Soma.
-- **Configuração de URL da API OpenAI:** Adicionada a capacidade de configurar uma URL personalizada para a API OpenAI através das configurações do VS Code (`psCopilot.apiUrl`), permitindo o uso de proxies corporativos.
+- **Remoção do Formulário de Geração:** A geração agora é acionada pela análise do prompt do usuário no chat.
+- **Refatoração do `FileService`:** Resolveu problemas de compilação com Webpack ao usar apenas `vscode.workspace.fs`.
+- **Melhoria na Detecção de Solicitações:** A lógica para identificar intenção de geração (`_isCodeGenerationRequest`) e os artefatos (`_identifyRequiredArtifacts`) foi aprimorada no `ChatViewProvider` (removida a dependência de `analyzeRequest`).
+- **Correção de API Key:** Implementadas verificações robustas e carregamento/atualização da API Key nos serviços.
+- **Atualização de Ícones:** Ícones redesenhados.
+- **Integração do Design System Soma:** Regras e componentes Soma incluídos nos prompts dos agentes.
+- **Identificação da Necessidade de Agente de Design:** Mantida como um ponto para evolução futura.
+- **Configuração de URL da API OpenAI:** Implementada.
+- **Refatoração de Agentes:**
+  - A lógica de construção de prompts foi delegada para classes de agente dedicadas (`DeveloperAgent`, `TestAgent`, `DesignAgent`) em `src/agents`.
+  - `OpenAIService` foi simplificado para atuar apenas como cliente da API OpenAI, recebendo prompts completos dos agentes.
+  - `CodeGenerationService` foi refatorado para orquestrar as chamadas aos agentes.
+  - Agentes e serviços não utilizados (`CoreCoordinator`, `AgentManagerService`, etc.) e o comando `manageAgents` foram removidos para simplificar a base de código.
+- **Resolução de Conflitos Pós-Refatoração:** Corrigidos erros de compilação (variáveis não usadas, chamadas de método incorretas) resultantes da refatoração dos agentes e serviços.
 
 ### Serviços Detalhados
 

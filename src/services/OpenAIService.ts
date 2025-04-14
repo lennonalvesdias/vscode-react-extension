@@ -1,7 +1,7 @@
-import axios from 'axios';
-import { AgentContext, AnalysisResult, CodeGenerationResult } from '../agents/types';
+// import axios from 'axios';
 import * as vscode from 'vscode';
 import OpenAI from 'openai';
+import { AgentContext } from '../agents/types';
 
 export class OpenAIService {
   private openai: OpenAI | null = null;
@@ -109,6 +109,18 @@ export class OpenAIService {
   // *** Métodos Públicos Simplificados ***
 
   /**
+   * Realiza uma chamada genérica para chat.
+   * @param userMessage A mensagem do usuário.
+   * @returns A resposta de texto da API.
+   */
+  async chat(userMessage: string): Promise<string> {
+    console.log('OpenAIService: Chamando chat (via makeRequest)');
+    // Usar um prompt de sistema padrão para chat genérico
+    const systemPrompt = 'Você é um assistente de IA útil.';
+    return this.makeRequest(systemPrompt, userMessage);
+  }
+
+  /**
    * Realiza uma chamada genérica para geração de código.
    * @param systemPrompt O prompt do sistema (instruções para a IA).
    * @param userContent O conteúdo do usuário (descrição, código existente, etc.).
@@ -139,21 +151,5 @@ export class OpenAIService {
   async generateTests(systemPrompt: string, userContent: string): Promise<string> {
     console.log('OpenAIService: Chamando generateTests (via makeRequest)');
     return this.makeRequest(systemPrompt, userContent);
-  }
-
-  // Remover métodos específicos antigos se ainda existirem (como analyzeRequest, analyzeTestQuality, etc.)
-  // Manter parseCodeGeneration se for usado em outro lugar, senão remover.
-  private parseCodeGeneration(result: string): any { // Tipo de retorno ajustado para 'any' ou removido
-    // Esta lógica provavelmente precisa ser movida para o DeveloperAgent ou CodeGenerationService
-    // se a estrutura de CodeGenerationResult for necessária.
-    // Por enquanto, deixaremos assim, mas os métodos públicos retornam string.
-    const codeMatch = result.match(/```(?:\w*)\s*([\s\S]*?)\s*```/);
-    const extractedCode = codeMatch ? codeMatch[1].trim() : result;
-    return {
-      code: extractedCode,
-      dependencies: [],
-      documentation: '',
-      tests: []
-    };
   }
 }

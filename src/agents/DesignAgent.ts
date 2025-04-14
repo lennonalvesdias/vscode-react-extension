@@ -1,13 +1,10 @@
 import { OpenAIService } from '../services/OpenAIService';
-import { AgentContext } from './types';
 
 export class DesignAgent {
   private openAIService: OpenAIService;
-  private context: AgentContext;
 
-  constructor(openAIService: OpenAIService, context: AgentContext) {
+  constructor(openAIService: OpenAIService) {
     this.openAIService = openAIService;
-    this.context = context;
   }
 
   async analyzeDesign(mainCode: string, description: string): Promise<string> {

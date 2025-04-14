@@ -1,59 +1,7 @@
-import { OpenAIService } from './OpenAIService';
 import { AgentContext } from '../agents/types';
 
-interface SecurityCheck {
-  recommendations: string[];
-  issues: string[];
-  score: number;
-  vulnerabilities: string[];
-}
-
 export class SecurityService {
-  private openAIService: OpenAIService;
-
   constructor(private context: AgentContext) {
-    this.openAIService = new OpenAIService(context);
-  }
-
-  async checkSecurity(analysis: any): Promise<SecurityCheck> {
-    try {
-      const prompt = this.buildPrompt(analysis);
-      const response = await this.openAIService.analyzeSecurity(prompt);
-
-      return this.parseSecurity(response);
-    } catch (error) {
-      throw new Error(`Erro na análise de segurança: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
-    }
-  }
-
-  private buildPrompt(analysis: any): string {
-    return `
-      Analise a segurança do seguinte componente:
-
-      Tipo: ${analysis.componentType}
-      Nome: ${analysis.suggestedName}
-      Requisitos: ${analysis.requirements.join(', ')}
-      Descrição: ${analysis.description}
-
-      Verifique:
-      1. Vulnerabilidades
-      2. Injeção de código
-      3. XSS
-      4. CSRF
-      5. Autenticação
-      6. Autorização
-      7. Validação de dados
-    `;
-  }
-
-  private parseSecurity(_response: string): SecurityCheck {
-    // Implementação básica do parser
-    return {
-      recommendations: [],
-      issues: [],
-      score: 0,
-      vulnerabilities: []
-    };
   }
 
   sanitizeInput(input: string): string {

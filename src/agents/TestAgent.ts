@@ -1,13 +1,10 @@
 import { OpenAIService } from '../services/OpenAIService';
-import { AgentContext } from './types';
 
 export class TestAgent {
   private openAIService: OpenAIService;
-  private context: AgentContext;
 
-  constructor(openAIService: OpenAIService, context: AgentContext) {
+  constructor(openAIService: OpenAIService) {
     this.openAIService = openAIService;
-    this.context = context; // Pode ser usado futuramente para configs específicas de teste
   }
 
   // Método para gerar código de teste

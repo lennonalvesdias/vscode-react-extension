@@ -1,14 +1,12 @@
-import { Agent, AgentMessage, AgentContext } from './types';
 import { OpenAIService } from '../services/OpenAIService';
+// import { AgentContext } from './types';
 import { ComponentGenerationRequest } from '../services/CodeGenerationService';
 
 export class DeveloperAgent {
   private openAIService: OpenAIService;
-  private context: AgentContext;
 
-  constructor(openAIService: OpenAIService, context: AgentContext) {
+  constructor(openAIService: OpenAIService) {
     this.openAIService = openAIService;
-    this.context = context;
   }
 
   async generateMainCode(request: ComponentGenerationRequest): Promise<string> {
