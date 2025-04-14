@@ -3,6 +3,10 @@
   "displayName": "PS Copilot",
   "description": "Assistente de desenvolvimento React com múltiplos agentes especializados",
   "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lennonalvesdias/vscode-react-extension"
+  },
   "engines": {
     "vscode": "^1.60.0"
   },
