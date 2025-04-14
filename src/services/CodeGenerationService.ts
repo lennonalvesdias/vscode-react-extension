@@ -2,6 +2,9 @@ import * as vscode from 'vscode';
 import { OpenAIService } from './OpenAIService';
 import { FileService } from './FileService';
 import { AgentContext } from '../agents/types';
+import { DeveloperAgent } from '../agents/DeveloperAgent';
+import { TestAgent } from '../agents/TestAgent';
+import { DesignAgent } from '../agents/DesignAgent';
 
 /**
  * Interface para representar uma solicitação de geração de componente React
@@ -33,10 +36,19 @@ export interface GeneratedFile {
 export class CodeGenerationService {
   private openAIService: OpenAIService;
   private fileService: FileService;
+  private developerAgent: DeveloperAgent;
+  private testAgent: TestAgent;
+  private designAgent: DesignAgent;
+  private context: AgentContext;
 
   constructor(context: AgentContext) {
+    this.context = context;
     this.openAIService = new OpenAIService(context);
     this.fileService = new FileService();
+
+    this.developerAgent = new DeveloperAgent(this.openAIService, context);
+    this.testAgent = new TestAgent(this.openAIService, context);
+    this.designAgent = new DesignAgent(this.openAIService, context);
   }
 
   /**
@@ -67,16 +79,40 @@ export class CodeGenerationService {
       request.path = this.getDefaultPath(request.type, request.name);
     }
 
-    // Preparar o prompt para a API OpenAI
-    const prompt = this.prepareComponentPrompt(request);
+    // Etapa 1: Gerar código principal com o DeveloperAgent
+    let mainCode: string;
+    try {
+      mainCode = await this.developerAgent.generateMainCode(request);
+    } catch (error) {
+      console.error("Erro fatal ao gerar código principal:", error);
+      vscode.window.showErrorMessage(`Erro ao gerar código principal: ${error instanceof Error ? error.message : error}`);
+      throw error; // Re-lança para interromper o fluxo
+    }
 
-    // Gerar código usando OpenAI
-    const response = await this.openAIService.generateCode(prompt);
+    // Etapa 2: Gerar testes com o TestAgent
+    // Roda em paralelo com a análise de design para otimizar tempo
+    const testPromise = this.testAgent.generateTests(mainCode, request.description)
+      .catch(error => {
+        console.error("Erro ao gerar testes (não fatal):", error);
+        return "// Falha ao gerar testes automaticamente."; // Retorna placeholder em caso de erro
+      });
 
-    // Extrair arquivos do texto gerado
-    const files = this.extractFiles(response.code, request.type, request.path, request.name);
+    // Etapa 3: Analisar design com o DesignAgent
+    // Roda em paralelo com a geração de testes
+    const designAnalysisPromise = this.designAgent.analyzeDesign(mainCode, request.description)
+      .catch(error => {
+        console.error("Erro ao analisar design (não fatal):", error);
+        return "/* Falha na análise de design. */"; // Retorna placeholder em caso de erro
+      });
 
-    // Criar arquivos no workspace
+    // Aguarda a conclusão das tarefas paralelas
+    const [testCode, designAnalysis] = await Promise.all([testPromise, designAnalysisPromise]);
+
+    // Etapa 4: Extrair/montar arquivos finais com base nos resultados dos agentes
+    const files = this.extractFiles(mainCode, testCode, designAnalysis, request);
+
+    // Etapa 5: Criar arquivos no workspace
+    const createdFiles: GeneratedFile[] = [];
     for (const file of files) {
       const exists = await this.fileService.fileExists(file.path);
       if (exists) {
@@ -91,258 +127,150 @@ export class CodeGenerationService {
       } else {
         await this.fileService.createFile(file.path, file.content);
       }
+      createdFiles.push(file); // Adiciona à lista de arquivos realmente criados/atualizados
     }
 
-    return files;
-  }
-
-  /**
-   * Prepara o prompt para a API OpenAI com base no tipo de componente
-   * @param request Detalhes do componente a ser gerado
-   */
-  private prepareComponentPrompt(request: ComponentGenerationRequest): string {
-    let prompt = `Aja como um Engenheiro Frontend. Sua tarefa é desenvolver um artefato React (${request.type}) chamado \"${request.name}\" baseado na seguinte descrição: ${request.description}.\n\n    **REGRAS DO DESIGN SYSTEM SOMA (OBRIGATÓRIAS):**\n    - **USE SOMENTE COMPONENTES SOMA:** Utilize exclusivamente componentes do Design System Soma importados de '@soma/react' (Ex: import { SomaButton } from '@soma/react'). A lista de componentes disponíveis está abaixo.\n    - **HTML NATIVO:** Use elementos HTML nativos SOMENTE se não houver um componente Soma adequado. Se usar HTML nativo, estilize-o conforme as regras.\n    - **TIPOGRAFIA SOMA:** Prefira os componentes de tipografia Soma (SomaHeading, SomaSubtitle, SomaParagraph, etc.) em vez de tags HTML como <p>, <h1>, etc.\n    - **ÍCONES SOMA:** Use SEMPRE o componente 'SomaIcon'. Aja como se você tivesse acesso a uma ferramenta 'icon-list' para encontrar o nome exato do ícone necessário.\n    - **ESTILIZAÇÃO:**\n        - Permita apenas redimensionamento (width, height) e posicionamento (margin, padding, top, left, etc.) em componentes Soma.\n        - Use SOMENTE unidades 'px' ou '%'.\n        - Foque em bom espaçamento, uso de cores (do DS implicitamente) e hierarquia visual.\n    - **DOCUMENTAÇÃO DOS COMPONENTES:** Aja como se você tivesse acesso a uma ferramenta 'component-documentation' e a tivesse consultado para entender props e uso de cada componente Soma antes de utilizá-lo.\n    - **EXPORTAÇÃO:** O componente principal gerado deve ser exportado como default.\n    - **QUALIDADE:** Gere código React moderno, limpo, legível e funcional.\n\n    **DESCRIÇÃO DETALHADA DO QUE FAZER:**\n    ${request.description}\n\n    **FOCO PARA O TIPO '${request.type}':**\n    `;
-
-    // Adiciona requisitos específicos do tipo
-    switch (request.type) {
-      case 'component':
-        prompt += `\n- Implemente o componente React com TypeScript.\n- Use CSS Modules para estilização de elementos HTML nativos, se necessário (arquivo ${request.name}.module.css).\n- Inclua PropTypes ou use tipos TypeScript para props.\n- Inclua comentários explicando a funcionalidade principal.\n- Gere um arquivo de teste básico (Jest/React Testing Library) em ${request.name}.test.tsx.\n- Estrutura esperada: index.tsx (export), ${request.name}.tsx (implementação), ${request.name}.module.css (se necessário), ${request.name}.test.tsx.\n`;
-        break;
-      case 'hook':
-        prompt += `\n- Implemente o hook React com TypeScript.\n- Nome do arquivo deve ser use${request.name}.ts.\n- Inclua comentários explicando a funcionalidade.\n- Gere um arquivo de teste básico (Jest/React Testing Library) em use${request.name}.test.ts.\n`;
-        break;
-      case 'service':
-        prompt += `\n- Implemente a classe de serviço com TypeScript.\n- Nome do arquivo deve ser ${request.name}Service.ts.\n- Defina métodos claros e bem tipados.\n- Inclua comentários explicando a funcionalidade.\n- Gere um arquivo de teste básico (Jest) em ${request.name}Service.test.ts.\n`;
-        break;
-      case 'page':
-        prompt += `\n- Implemente a página como um componente funcional React com TypeScript.\n- Use CSS Modules para estilização de elementos HTML nativos, se necessário (arquivo ${request.name}Page.module.css).\n- Estruture a página pensando em layout, responsividade (usando SomaGrid se apropriado) e usabilidade.\n- Gere um arquivo de teste básico (Jest/React Testing Library) em ${request.name}Page.test.tsx.\n- Estrutura esperada: index.tsx (export), ${request.name}Page.tsx (implementação), ${request.name}Page.module.css (se necessário), ${request.name}Page.test.tsx.\n`;
-        break;
-    }
-
-    // Adiciona a lista de componentes Soma disponíveis
-    prompt += `\n    **LISTA DE COMPONENTES SOMA DISPONÍVEIS (@soma/react):**\n    - SomaAccordion, SomaAccordionFooter, SomaAccordionHeader, SomaAccordionItem, SomaAlert, SomaAutocomplete, SomaAutocompleteItem, SomaAvatar, SomaBackdrop, SomaBadge, SomaBanner, SomaBannerItem, SomaButton, SomaButtonLink, SomaCalendar, SomaCalendarDay, SomaCaption, SomaCard, SomaCardActions, SomaCardContent, SomaCardHeader, SomaCardMedia, SomaCardMediaDescription, SomaCheckbox, SomaChip, SomaContainer, SomaContext, SomaDatepicker, SomaDescription, SomaDialog, SomaDialogWarning, SomaDivider, SomaDrawer, SomaDrawerAction, SomaDrawerContent, SomaDrawerHeader, SomaForm, SomaGrid, SomaGridCol, SomaGridRow, SomaHeading, SomaHide, SomaIcon, SomaIconButton, SomaInputBankPassword, SomaLink, SomaList, SomaListItem, SomaListItemAction, SomaMenu, SomaMenuAnchor, SomaMenuItem, SomaModal, SomaOption, SomaPagination, SomaParagraph, SomaPopover, SomaPopoverContent, SomaPopper, SomaPopperContent, SomaProgress, SomaQuantity, SomaRadio, SomaRadioGroup, SomaRating, SomaSearch, SomaSelect, SomaShortcut, SomaSkeleton, SomaSmartForm, SomaSnackbar, SomaSpinner, SomaStepper, SomaStep, SomaSubtitle, SomaSwitch, SomaSwitchText, SomaTab, SomaTable, SomaTableBody, SomaTableCell, SomaTableCollapse, SomaTableHead, SomaTableRow, SomaTabs, SomaTextField, SomaTextarea, SomaTimePicker, SomaTooltip, SomaUpload, SomaUploadDraggable, SomaUploadList, SomaUploadListItem\n    `;
-
-    // Instrução final para o formato de saída JSON, muito simplificado
-    prompt += `\n    **FORMATO DE SAÍDA (OBRIGATÓRIO):**\n    Responda APENAS com um JSON válido contendo a chave 'files'. O valor de 'files' deve ser um array de objetos, cada um com 'name' (string, caminho relativo) e 'content' (string, código).\n\n    Exemplo de JSON:\n    {\n      "files": [\n        {\n          "name": "./${request.name}.tsx",\n          "content": "import React from 'react'; ..."\n        },\n        {\n          "name": "./${request.name}.test.tsx",\n          "content": "import React from 'react'; ..."\n        }\n      ]\n    }\n    `;
-
-    return prompt;
+    // Retorna apenas os arquivos que foram efetivamente criados ou confirmados para sobrescrita
+    return createdFiles;
   }
 
   /**
    * Extrai os arquivos do texto gerado pelo OpenAI
-   * @param text Texto gerado pelo OpenAI (esperado ser um JSON ou blocos de código)
-   * @param type Tipo do componente
-   * @param basePath Caminho base para os arquivos
-   * @param name Nome do componente
+   * @param mainCode Código principal gerado pelo OpenAI
+   * @param testCode Código de teste gerado pelo OpenAI
+   * @param designAnalysis Análise de design gerada pelo OpenAI
+   * @param request Detalhes do componente
    */
-  private extractFiles(text: string, type: string, basePath: string, name: string): GeneratedFile[] {
-    try {
-      // Tentativa direta de parse JSON, esperando que a OpenAI retorne algo parsable
-      // Remover possíveis ```json e ``` do início/fim antes de parsear
-      const cleanedText = text.trim().replace(/^```json\s*|\s*```$/g, '');
-      const parsedResult = JSON.parse(cleanedText);
+  private extractFiles(
+    mainCode: string,
+    testCode: string,
+    designAnalysis: string,
+    request: ComponentGenerationRequest
+  ): GeneratedFile[] {
+    const files: GeneratedFile[] = [];
+    const { type, path: basePath = '', name } = request; // Usa request desestruturado
+    const componentName = name.charAt(0).toUpperCase() + name.slice(1); // Capitaliza nome
 
-      if (parsedResult && Array.isArray(parsedResult.files)) {
-        console.log("Resposta JSON válida da OpenAI encontrada e parseada.");
-        return parsedResult.files.map((fileData: any) => {
-          let filePath = fileData.name;
-          if (filePath.startsWith('./')) {
-            filePath = filePath.substring(2);
-          } else if (filePath.startsWith('/')) {
-            filePath = filePath.substring(1);
-          }
-          const finalPath = filePath.includes('src/') ? filePath : `${basePath}/${filePath}`;
-          return {
-            path: finalPath.replace(/\\/g, '/'), // Normalizar barras
-            content: fileData.content
-          };
-        }).filter((f: GeneratedFile | null): f is GeneratedFile => f !== null && !!f.path && !!f.content);
+    // Adiciona a análise de design como comentário no início do código principal
+    const mainCodeWithAnalysis = `/*\nAnálise de Design e Acessibilidade:\n${designAnalysis}\n*/\n\n${mainCode}`;
+
+    switch (type) {
+      case 'component': {
+        const mainFilePath = `${basePath}/${componentName}.tsx`;
+        const testFilePath = `${basePath}/${componentName}.test.tsx`;
+        const indexFilePath = `${basePath}/index.tsx`;
+        const cssFilePath = `${basePath}/${componentName}.module.css`;
+
+        // Arquivo Principal (.tsx)
+        files.push({ path: mainFilePath, content: mainCodeWithAnalysis });
+
+        // Arquivo de Teste (.test.tsx)
+        if (testCode) {
+          files.push({ path: testFilePath, content: testCode });
+        } else {
+          // Gera um teste básico se o agente falhou
+          files.push({ path: testFilePath, content: this.generateBasicTest(componentName, type) });
+        }
+
+        // Arquivo Index (index.tsx)
+        files.push({ path: indexFilePath, content: `export { default } from './${componentName}';\n` });
+
+        // Arquivo CSS Module (.module.css) - Gerar vazio por padrão
+        // A lógica de geração pode adicionar estilos aqui se detectar necessidade
+        files.push({ path: cssFilePath, content: `/* Estilos para ${componentName} */\n` });
+        break;
       }
-    } catch (error) {
-      // Não loga erro aqui, pois o fallback é esperado se o parse falhar
+      case 'hook': {
+        const hookFileName = `use${componentName}`;
+        const mainFilePath = `${basePath}/${hookFileName}.ts`;
+        const testFilePath = `${basePath}/${hookFileName}.test.ts`;
+
+        // Arquivo Principal (.ts) - Análise de design pode ser menos relevante aqui, mas incluímos por consistência
+        files.push({ path: mainFilePath, content: `/*\nAnálise:\n${designAnalysis}\n*/\n\n${mainCode}` });
+
+        // Arquivo de Teste (.test.ts)
+        if (testCode) {
+          files.push({ path: testFilePath, content: testCode });
+        } else {
+          files.push({ path: testFilePath, content: this.generateBasicTest(hookFileName, type) });
+        }
+        break;
+      }
+      case 'service': {
+        const serviceFileName = `${componentName}Service`;
+        const mainFilePath = `${basePath}/${serviceFileName}.ts`;
+        const testFilePath = `${basePath}/${serviceFileName}.test.ts`;
+
+        // Arquivo Principal (.ts)
+        files.push({ path: mainFilePath, content: `/*\nAnálise:\n${designAnalysis}\n*/\n\n${mainCode}` });
+
+        // Arquivo de Teste (.test.ts)
+        if (testCode) {
+          files.push({ path: testFilePath, content: testCode });
+        } else {
+          files.push({ path: testFilePath, content: this.generateBasicTest(serviceFileName, type) });
+        }
+        break;
+      }
+      case 'page': {
+        const pageFileName = `${componentName}Page`;
+        const mainFilePath = `${basePath}/${pageFileName}.tsx`;
+        const testFilePath = `${basePath}/${pageFileName}.test.tsx`;
+        const indexFilePath = `${basePath}/index.tsx`;
+        const cssFilePath = `${basePath}/${pageFileName}.module.css`;
+
+        // Arquivo Principal (.tsx)
+        files.push({ path: mainFilePath, content: mainCodeWithAnalysis });
+
+        // Arquivo de Teste (.test.tsx)
+        if (testCode) {
+          files.push({ path: testFilePath, content: testCode });
+        } else {
+          files.push({ path: testFilePath, content: this.generateBasicTest(pageFileName, type) });
+        }
+
+        // Arquivo Index (index.tsx)
+        files.push({ path: indexFilePath, content: `export { default } from './${pageFileName}';\n` });
+
+        // Arquivo CSS Module (.module.css)
+        files.push({ path: cssFilePath, content: `/* Estilos para ${pageFileName} */\n` });
+        break;
+      }
     }
 
-    console.warn('Parse direto de JSON falhou ou JSON inválido. Extraindo de blocos de código.');
-    return this._extractFilesFromCodeBlocks(text, type, basePath, name);
+    // Normalizar caminhos (remover ./)
+    return files.map(file => ({
+      ...file,
+      path: file.path.replace(/^\.\//, '')
+    }));
   }
 
   /**
-   * Fallback: Extrai arquivos de blocos de código Markdown
+   * Gera um conteúdo básico de teste caso a geração pela IA falhe.
+   * @param name Nome do componente/hook/serviço
+   * @param type Tipo (component, hook, service, page)
    */
-  private _extractFilesFromCodeBlocks(text: string, type: string, basePath: string, name: string): GeneratedFile[] {
-    const files: GeneratedFile[] = [];
-    // Regex aprimorada para capturar nome do arquivo opcional após ```lang(filename.ext)
-    const codeBlocks = text.match(/```(?:\w+)?(?:\(?([\w\.\/\-]+\.[jt]sx?|(?:\w+\.)?module\.css)\)?)?\s*\n([\s\S]*?)```/g) || [];
+  private generateBasicTest(name: string, type: 'component' | 'hook' | 'service' | 'page'): string {
     const componentName = name.charAt(0).toUpperCase() + name.slice(1);
-
-    // Nomes esperados baseados no tipo
-    let expectedFiles: { [key: string]: string } = {};
     switch (type) {
       case 'component':
-        expectedFiles = {
-          [`${componentName}.tsx`]: `${basePath}/${componentName}.tsx`,
-          [`${componentName}.module.css`]: `${basePath}/${componentName}.module.css`,
-          [`${componentName}.test.tsx`]: `${basePath}/${componentName}.test.tsx`,
-          [`index.tsx`]: `${basePath}/index.tsx`,
-        };
-        break;
-      case 'hook':
-        expectedFiles = {
-          [`use${componentName}.ts`]: `${basePath}/use${componentName}.ts`,
-          [`use${componentName}.test.ts`]: `${basePath}/use${componentName}.test.ts`,
-        };
-        break;
-      case 'service':
-        expectedFiles = {
-          [`${componentName}Service.ts`]: `${basePath}/${componentName}Service.ts`,
-          [`${componentName}Service.test.ts`]: `${basePath}/${componentName}Service.test.ts`,
-        };
-        break;
       case 'page':
-        expectedFiles = {
-          [`${componentName}Page.tsx`]: `${basePath}/${componentName}Page.tsx`,
-          [`${componentName}Page.module.css`]: `${basePath}/${componentName}Page.module.css`,
-          [`${componentName}Page.test.tsx`]: `${basePath}/${componentName}Page.test.tsx`,
-          [`index.tsx`]: `${basePath}/index.tsx`,
-        };
-        break;
-    }
-
-    codeBlocks.forEach(block => {
-      const match = block.match(/```(?:\w+)?(?:\(?([\w\.\/\-]+\.[jt]sx?|(?:\w+\.)?module\.css)\)?)?\s*\n([\s\S]*?)```/);
-      if (match && match[2]) { // match[2] é o conteúdo
-        const content = match[2].trim();
-        const fileName = match[1]; // Nome do arquivo capturado da sintaxe ```lang(filename.ext)
-        let filePath: string | null = null;
-
-        if (fileName) {
-          // Se o nome foi capturado, tenta encontrar correspondência exata ou parcial
-          const foundKey = Object.keys(expectedFiles).find(key => fileName.endsWith(key));
-          if (foundKey) {
-            filePath = expectedFiles[foundKey];
-            delete expectedFiles[foundKey]; // Remove para evitar duplicatas
-          }
-        } else {
-          // Se não capturou nome, tenta adivinhar pelo conteúdo ou tipo
-          // Procura por nomes de arquivo esperados dentro do conteúdo
-          const foundKey = Object.keys(expectedFiles).find(key => content.includes(key));
-          if (foundKey) {
-            filePath = expectedFiles[foundKey];
-            delete expectedFiles[foundKey];
-          }
+        {
+          const importName = type === 'page' ? `${componentName}Page` : componentName;
+          const importPath = type === 'page' ? `./${importName}` : `./${componentName}`;
+          return `import React from 'react';\nimport { render, screen } from '@testing-library/react';\nimport '@testing-library/jest-dom';\nimport ${importName} from '${importPath}';\n\ndescribe('${importName}', () => {\n  it('should render without crashing', () => {\n    render(<${importName} />);\n    // Adicione asserções mais específicas aqui\n    // Exemplo: expect(screen.getByText("Algum Texto")).toBeInTheDocument();\n  });\n});\n`;
         }
-
-        // Se ainda não encontrou, mas só sobrou um arquivo esperado, assume que é ele
-        if (!filePath && Object.keys(expectedFiles).length === 1) {
-          const lastKey = Object.keys(expectedFiles)[0];
-          filePath = expectedFiles[lastKey];
-          delete expectedFiles[lastKey];
+      case 'hook':
+        {
+          const hookName = name.startsWith('use') ? name : `use${componentName}`;
+          return `import { renderHook } from '@testing-library/react';
+import ${hookName} from './${hookName}';\n\ndescribe('${hookName}', () => {\n  it('should execute without crashing', () => {\n    const { result } = renderHook(() => ${hookName}());\n    // Adicione asserções sobre o estado inicial ou retorno do hook\n    // Exemplo: expect(result.current.someValue).toBe(expectedValue);\n  });\n});\n`;
         }
-
-        if (filePath) {
-          files.push({ path: filePath, content });
-        } else {
-          console.warn("Bloco de código encontrado mas não foi possível determinar o nome do arquivo:", content.substring(0, 100));
+      case 'service':
+        {
+          const serviceName = name.endsWith('Service') ? name : `${componentName}Service`;
+          return `import ${serviceName} from './${serviceName}';\n\ndescribe('${serviceName}', () => {\n  let service: ${serviceName};\n\n  beforeEach(() => {\n    service = new ${serviceName}();\n  });\n\n  it('should be created', () => {\n    expect(service).toBeTruthy();\n  });\n\n  // Adicione testes para os métodos do serviço aqui\n  // Exemplo:\n  // it('should perform some action', async () => {\n  //   const result = await service.someMethod();\n  //   expect(result).toEqual(expectedResult);\n  // });\n});\n`;
         }
-      }
-    });
-
-    // Adiciona arquivos de fallback básicos se ainda faltarem
-    Object.entries(expectedFiles).forEach(([key, path]) => {
-      console.log(`Gerando fallback básico para arquivo não encontrado: ${key}`);
-      if (key.endsWith('.test.tsx') || key.endsWith('.test.ts')) {
-        files.push({ path, content: this._generateBasicTestContent(type, componentName) });
-      } else if (key.endsWith('index.tsx')) {
-        files.push({ path, content: this._generateBasicIndexContent(type, componentName) });
-      } else if (key.endsWith('.tsx')) {
-        files.push({ path, content: this._generateBasicComponentContent(type, componentName) });
-      } else if (key.endsWith('.ts')) { // Hooks ou Services
-        files.push({ path, content: this._generateBasicTsContent(type, componentName) });
-      } else if (key.endsWith('.module.css')) {
-        // Não gera CSS por padrão no fallback, só se for explicitamente pedido
-      }
-    });
-    return files;
-  }
-
-  // --- Funções auxiliares para gerar conteúdo básico de fallback ---
-  private _generateBasicTestContent(type: string, name: string): string {
-    const componentImportName = type === 'page' ? `${name}Page` : type === 'hook' ? `use${name}` : type === 'service' ? `{ ${name}Service }` : name;
-    const componentPath = type === 'page' ? `./${name}Page` : type === 'hook' ? `./use${name}` : type === 'service' ? `./${name}Service` : `./${name}`;
-    const describeName = type === 'hook' ? `use${name}` : type === 'service' ? `${name}Service` : `${name}${type === 'page' ? 'Page' : ''}`;
-
-    if (type === 'hook') {
-      return `import { renderHook } from '@testing-library/react';
-import ${componentImportName} from '${componentPath}';
-
-describe('${describeName}', () => {
-  it('should work', () => {
-    const { result } = renderHook(() => ${componentImportName}());
-    expect(result.current).toBeDefined();
-  });
-});`;
-    } else if (type === 'service') {
-      return `import ${componentImportName} from '${componentPath}';
-
-describe('${describeName}', () => {
-  let service: ${name}Service;
-  beforeEach(() => { service = new ${name}Service(); });
-  it('should be created', () => { expect(service).toBeTruthy(); });
-});`;
-    } else { // Component ou Page
-      return `import React from 'react';
-import { render } from '@testing-library/react';
-import ${componentImportName} from '${componentPath}';
-
-describe('${describeName}', () => {
-  it('should render successfully', () => {
-    const { baseElement } = render(<${componentImportName} />);
-    expect(baseElement).toBeTruthy();
-  });
-});`;
-    }
-  }
-
-  private _generateBasicIndexContent(type: string, name: string): string {
-    const componentImportName = type === 'page' ? `${name}Page` : name;
-    const componentPath = type === 'page' ? `./${name}Page` : `./${name}`;
-    return `import ${componentImportName} from '${componentPath}';
-
-export default ${componentImportName};`;
-  }
-
-  private _generateBasicComponentContent(type: string, name: string): string {
-    const componentName = type === 'page' ? `${name}Page` : name;
-    return `import React from 'react';
-// Importe componentes Soma aqui: import { SomaContainer, SomaHeading } from '@soma/react';
-// import styles from './${componentName}.module.css';
-
-${type === 'component' ? `interface ${componentName}Props { /* Props */ }\n` : ''}
-const ${componentName}: React.FC<${type === 'component' ? `${componentName}Props` : '{}'}> = (props) => {
-  return (
-<SomaContainer>\n < SomaHeading variant ="heading-5">${componentName}</SomaHeading>\n      {/* Implementação básica usando Soma */}\n    </SomaContainer>\n  );
-};
-
-export default ${componentName};`;
-  }
-
-  private _generateBasicTsContent(type: string, name: string): string {
-    if (type === 'hook') {
-      const hookName = `use${name}`;
-      return `import { useState } from 'react';
-
-interface ${hookName}Options { /* Opções */ }
-interface ${hookName}Result { /* Resultado */ }
-
-const ${hookName} = (options?: ${hookName}Options): ${hookName}Result => {
-  // Implementação básica
-  return {};
-};
-
-export default ${hookName};`;
-    } else { // Service
-      const serviceName = `${name}Service`;
-      return `export class ${serviceName} {\n  constructor() { /* Inicialização */ }\n  // Métodos do serviço\n}`;
     }
   }
 

@@ -8,17 +8,44 @@ O PS Copilot é uma extensão do Visual Studio Code projetada para auxiliar dese
 
 O objetivo principal é agilizar o desenvolvimento e garantir a consistência do código gerado com os padrões Soma.
 
-## 2. Arquitetura Atual
+## 2. Arquitetura
 
-- **Interface Principal:** Uma Webview (`ChatViewProvider`) que exibe uma interface de chat inspirada no GitHub Copilot.
-- **Serviços Principais:**
-  - `OpenAIService`: Gerencia a comunicação com a API da OpenAI (GPT-3.5-turbo por padrão) para processamento de chat e análise de solicitações de código. **Agora suporta uma URL de API configurável.**
-  - `CodeGenerationService`: Orquestra a geração de código. Recebe a descrição, prepara prompts detalhados para a OpenAI **incorporando as regras e componentes do Soma DS**, extrai o código gerado e cria os arquivos necessários.
-  - `FileService`: Abstrai as operações de sistema de arquivos usando a API do VS Code (`vscode.workspace.fs`) para criar, ler, atualizar e verificar a existência de arquivos no workspace.
-  - `ConfigurationService`: Gerencia a configuração da extensão, principalmente o armazenamento seguro e recuperação da API Key da OpenAI.
-- **Contexto do Agente (`AgentContext`):** Uma interface que mantém o estado e a configuração necessários para os serviços (API Key, modelo, configurações de prompt, estado do VS Code). **Incluindo apiUrl opcional.**
+A extensão segue uma arquitetura baseada em componentes do VS Code e serviços desacoplados:
 
-**Nota:** A especificação menciona uma arquitetura multiagentes (Desenvolvedor, Design, Produto, Testes), mas a implementação atual foca principalmente nas funcionalidades do agente desenvolvedor (análise de prompt e geração de código) integradas ao `ChatViewProvider` e `OpenAIService`.
+1.  **`ChatViewProvider`**: Implementa `WebviewViewProvider`. É responsável por:
+    - Renderizar a interface do chat (HTML/CSS/JS) na Webview.
+    - Gerenciar a comunicação bidirecional entre a Webview e a Extensão (postMessage).
+    - Receber mensagens do usuário, processar comandos (ex: `/config`, `/generate`) e interagir com os serviços apropriados.
+    - Manter o estado básico da conversa.
+    - Orquestrar a chamada inicial para o `CodeGenerationService` para geração de código.
+2.  **`OpenAIService`**:
+    - Encapsula a comunicação com a API OpenAI (usando a biblioteca `openai`).
+    - Recebe a API Key (via `AgentContext` ou configurações do VS Code).
+    - Suporta uma URL de API configurável (`psCopilot.apiUrl`) para proxies.
+    - **Responsabilidade Principal:** Atua como um cliente genérico para a API OpenAI, recebendo prompts de sistema e conteúdo do usuário _dos Agentes_ e executando a requisição (`makeRequest`). Métodos públicos (`generateCode`, `generateTests`, `analyzeDesignCompliance`) foram simplificados para apenas encaminhar a requisição.
+3.  **`FileService`**:
+    - Abstrai operações de arquivo no workspace do usuário (criar, ler, atualizar, verificar existência) usando a API `vscode.workspace.fs`.
+4.  **`CodeGenerationService`**:
+    - **Responsabilidade Principal:** Orquestra o fluxo de geração de código multiagente.
+    - Recebe a solicitação de geração do `ChatViewProvider`.
+    - Instancia os agentes necessários (`DeveloperAgent`, `TestAgent`, `DesignAgent`).
+    - Chama os agentes em sequência (ou paralelo quando possível) para:
+      - Gerar o código principal (`DeveloperAgent`).
+      - Gerar os testes (`TestAgent`).
+      - Analisar a conformidade de design e acessibilidade (`DesignAgent`).
+    - Utiliza o `FileService` para criar/atualizar os arquivos gerados no workspace.
+    - Monta a estrutura final dos arquivos (ex: adicionando análise de design como comentário, criando `index.ts`, `module.css`).
+5.  **Agentes (`src/agents`)**:
+    - Cada agente encapsula uma especialidade específica.
+    - **Responsabilidade Principal:** Construir o prompt (System Prompt e User Content) adequado para sua tarefa e chamar o método correspondente no `OpenAIService`.
+    - Agentes Atuais:
+      - `DeveloperAgent`: Gera o código principal do componente/hook/serviço/página.
+      - `TestAgent`: Gera o código de teste (Jest/RTL).
+      - `DesignAgent`: Analisa a conformidade com o Design System Soma e acessibilidade.
+    - O diretório `src/agents` foi limpo, removendo agentes não utilizados no fluxo principal.
+6.  **Configuração (`package.json` e `settings`)**:
+    - Define pontos de contribuição, como comandos e configurações.
+    - Permite ao usuário configurar a API Key (`psCopilot.apiKey`) e a URL da API (`psCopilot.apiUrl`) através das configurações do VS Code.
 
 ## 3. Funcionalidades Implementadas
 
@@ -73,3 +100,25 @@ O objetivo principal é agilizar o desenvolvimento e garantir a consistência do
 - **Integração do Design System Soma:** As regras e a lista de componentes do Soma (definidas em `soma.txt`) foram incorporadas aos prompts de geração de código do `CodeGenerationService` para melhorar a aderência do código gerado.
 - **Identificação da Necessidade de Agente de Design:** A análise do `soma.txt` (`BeautifyPrompt`) reforçou a necessidade futura de um agente especializado em design para garantir a qualidade visual e aderência ao Soma.
 - **Configuração de URL da API OpenAI:** Adicionada a capacidade de configurar uma URL personalizada para a API OpenAI através das configurações do VS Code (`psCopilot.apiUrl`), permitindo o uso de proxies corporativos.
+
+### Serviços Detalhados
+
+- **`OpenAIService.ts`**:
+  - Usa a biblioteca `openai`.
+  - Inicializa com `AgentContext` (API Key, Modelo, Temperatura, Max Tokens, Timeout, API URL opcional).
+  - Busca API Key e API URL das configurações do VS Code se não fornecidas no contexto.
+  - Método `makeRequest` privado para chamadas à API `chat.completions.create`.
+  - Métodos públicos (`generateCode`, `generateTests`, `analyzeDesignCompliance`) simplificados que recebem `systemPrompt` e `userContent` e chamam `makeRequest`. Não contém mais lógica de construção de prompts específicos dos agentes.
+- **`CodeGenerationService.ts`**:
+  - Recebe `AgentContext` no construtor.
+  - Instancia `OpenAIService`, `FileService`, `DeveloperAgent`, `TestAgent`, `DesignAgent`.
+  - Método `generateReactComponent`:
+    - Valida a requisição.
+    - Chama `developerAgent.generateMainCode`.
+    - Chama `testAgent.generateTests` e `designAgent.analyzeDesign` (em paralelo).
+    - Chama `extractFiles` para montar os arquivos finais.
+    - Chama `fileService` para criar/atualizar arquivos.
+  - Método `extractFiles`: Monta a estrutura de arquivos (`.tsx`, `.test.tsx`, `index.tsx`, `.module.css`) com base nos resultados dos agentes. Adiciona a análise de design como comentário.
+  - Método `generateBasicTest`: Gera um esqueleto de teste se o `TestAgent` falhar.
+  - Método `getDefaultPath`: Retorna o caminho padrão com base no tipo e nome.
+- **`FileService.ts`**: Métodos assíncronos para interagir com `vscode.workspace.fs` (readFile, writeFile, stat, delete).

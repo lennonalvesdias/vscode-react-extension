@@ -1,38 +1,44 @@
-import { Agent, AgentMessage, AgentContext } from './types';
 import { OpenAIService } from '../services/OpenAIService';
+import { AgentContext } from './types';
 
-export class TestAgent implements Agent {
+export class TestAgent {
   private openAIService: OpenAIService;
+  private context: AgentContext;
 
-  constructor(context: AgentContext) {
-    this.openAIService = new OpenAIService(context);
+  constructor(openAIService: OpenAIService, context: AgentContext) {
+    this.openAIService = openAIService;
+    this.context = context; // Pode ser usado futuramente para configs específicas de teste
   }
 
-  get name(): string {
-    return 'TestAgent';
-  }
+  // Método para gerar código de teste
+  async generateTests(mainCode: string, description: string): Promise<string> {
+    console.log('TestAgent: Gerando testes...');
 
-  get description(): string {
-    return 'Garante a qualidade dos testes';
-  }
+    // Construir prompt do sistema
+    const systemPrompt = `Você é um especialista em testes de software para aplicações React, usando Jest e React Testing Library.
+Gere casos de teste unitários/integração para o seguinte componente/hook/serviço React.
+Cubra os principais cenários de sucesso, erro e casos limite com base na descrição e no código fornecido.
+Use mocks onde for apropriado (ex: chamadas de API, hooks customizados).
+Retorne APENAS o código de teste dentro de um único bloco de código markdown (ex: \`\`\`tsx ... \`\`\`).
+Não inclua explicações fora do bloco de código.`;
 
-  async process(message: AgentMessage): Promise<AgentMessage> {
+    // Construir conteúdo do usuário
+    const userContent = `Descrição da Tarefa: ${description}\n\nCódigo para Testar:\n\`\`\`tsx\n${mainCode}\n\`\`\``;
+
     try {
-      const analysis = await this.openAIService.analyzeTestQuality(message.content);
+      // Chama o método simplificado do OpenAIService
+      const testCodeRaw = await this.openAIService.generateTests(systemPrompt, userContent);
+      console.log('TestAgent: Testes gerados (string bruta).');
 
-      return {
-        role: 'assistant',
-        type: 'response',
-        content: analysis,
-        metadata: { analysis }
-      };
+      // Extrai o código do bloco markdown
+      const testCodeMatch = testCodeRaw.match(/```(?:tsx?|ts|javascript)?\s*([\s\S]*?)```/);
+      const finalTestCode = testCodeMatch ? testCodeMatch[1].trim() : testCodeRaw;
+
+      return finalTestCode;
     } catch (error) {
-      return {
-        role: 'assistant',
-        type: 'error',
-        content: `Erro na análise de testes: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
-        metadata: { error }
-      };
+      console.error('TestAgent: Erro ao gerar testes:', error);
+      // Retorna um placeholder indicando a falha
+      return "// Falha ao gerar testes automaticamente pelo TestAgent.";
     }
   }
 }
