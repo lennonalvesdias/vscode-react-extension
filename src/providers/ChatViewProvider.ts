@@ -35,10 +35,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     // Carregar modelo selecionado das configurações
     this._selectedModel = this._context.globalState.get<string>('selectedModel') || 'gpt-3.5-turbo';
 
+    // Carregar URL da API das configurações
+    const config = vscode.workspace.getConfiguration('psCopilot');
+    const customApiUrl = config.get<string>('apiUrl');
+
     // Inicializar serviços
     const agentContext: AgentContext = {
-      apiKey: '',
+      apiKey: '', // Será carregado em _loadApiKey
       model: this._selectedModel,
+      apiUrl: customApiUrl || undefined, // Usar URL customizada ou undefined
       temperature: 0.7,
       maxTokens: 2000,
       timeout: 30000,
@@ -46,14 +51,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       extensionPath: _extensionUri.fsPath,
       globalState: _context.globalState,
       workspaceState: _context.workspaceState,
-      configuration: vscode.workspace.getConfiguration('psCopilot')
+      configuration: config // Passar a configuração lida
     };
 
     this._configService = new ConfigurationService(agentContext);
     this._openAIService = new OpenAIService(agentContext);
     this._codeGenerationService = new CodeGenerationService(agentContext);
 
-    // Carregar API Key
+    // Carregar API Key (isso também recriará os serviços com a key)
     this._loadApiKey();
 
     // Verificar se já tem API Key configurada
@@ -91,31 +96,36 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private async _loadApiKey() {
     try {
       const apiKey = await this._configService.getApiKey();
+      // Carregar URL da API das configurações novamente
+      const config = vscode.workspace.getConfiguration('psCopilot');
+      const customApiUrl = config.get<string>('apiUrl');
+
+      // Atualizar agentContext com a API Key e a URL mais recente
+      const agentContext: AgentContext = {
+        apiKey: apiKey || '', // Garante que apiKey não seja null
+        model: this._selectedModel,
+        apiUrl: customApiUrl || undefined,
+        temperature: 0.7,
+        maxTokens: 2000,
+        timeout: 30000,
+        extensionUri: this._extensionUri,
+        extensionPath: this._extensionUri.fsPath,
+        globalState: this._context.globalState,
+        workspaceState: this._context.workspaceState,
+        configuration: config
+      };
+
+      // Atualizar/Recriar os serviços com o contexto atualizado
+      this._openAIService = new OpenAIService(agentContext);
+      this._codeGenerationService = new CodeGenerationService(agentContext);
+
       if (apiKey) {
-        // Atualizar agentContext com a nova API Key
-        const agentContext: AgentContext = {
-          apiKey: apiKey,
-          model: this._selectedModel,
-          temperature: 0.7,
-          maxTokens: 2000,
-          timeout: 30000,
-          extensionUri: this._extensionUri,
-          extensionPath: this._extensionUri.fsPath,
-          globalState: this._context.globalState,
-          workspaceState: this._context.workspaceState,
-          configuration: vscode.workspace.getConfiguration('psCopilot')
-        };
-
-        // Atualizar os serviços com a nova API Key
-        this._openAIService.setApiKey(apiKey);
-        this._codeGenerationService = new CodeGenerationService(agentContext);
-
-        console.log('API Key carregada e serviços atualizados com sucesso');
+        console.log('API Key e URL carregadas e serviços atualizados com sucesso');
       } else {
-        console.log('Nenhuma API Key encontrada');
+        console.log('Nenhuma API Key encontrada, usando URL padrão/configurada');
       }
     } catch (error) {
-      console.error('Erro ao carregar API Key:', error);
+      console.error('Erro ao carregar API Key/URL:', error);
     }
   }
 
@@ -295,6 +305,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     try {
       // Verificar se tem API Key configurada
       const apiKey = await this._configService.getApiKey();
+      // Carregar URL da API das configurações
+      const config = vscode.workspace.getConfiguration('psCopilot');
+      const customApiUrl = config.get<string>('apiUrl');
+
       if (!apiKey) {
         // Mostrar opção para configurar a API Key
         vscode.window.showErrorMessage(
@@ -314,10 +328,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         return 'Não foi possível gerar o código porque nenhum workspace está aberto. Abra um projeto para gerar código.';
       }
 
-      // Assegurar que o serviço de geração de código tenha a API Key correta
+      // Assegurar que os serviços tenham o contexto mais recente
       const agentContext: AgentContext = {
         apiKey: apiKey,
         model: this._selectedModel,
+        apiUrl: customApiUrl || undefined,
         temperature: 0.7,
         maxTokens: 2000,
         timeout: 30000,
@@ -325,14 +340,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         extensionPath: this._extensionUri.fsPath,
         globalState: this._context.globalState,
         workspaceState: this._context.workspaceState,
-        configuration: vscode.workspace.getConfiguration('psCopilot')
+        configuration: config
       };
 
-      // Recria o serviço de geração de código com a API Key atualizada
+      // Recria os serviços com o contexto atualizado
+      this._openAIService = new OpenAIService(agentContext);
       this._codeGenerationService = new CodeGenerationService(agentContext);
-      this._openAIService.setApiKey(apiKey);
 
-      console.log('Iniciando análise do pedido de geração de código');
+      console.log('Iniciando análise do pedido de geração de código com URL:', this._openAIService.apiUrl); // Log para depuração
 
       // Analisar a solicitação para extrair informações
       const analysisResult = await this._openAIService.analyzeRequest(text);

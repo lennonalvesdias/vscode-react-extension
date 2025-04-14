@@ -77,6 +77,17 @@
           "group": "navigation"
         }
       ]
+    },
+    "configuration": {
+      "title": "PS Copilot",
+      "properties": {
+        "psCopilot.apiUrl": {
+          "type": "string",
+          "default": "",
+          "description": "(Opcional) URL personalizada para a API OpenAI (ex: para usar um proxy corporativo). Se deixado em branco, usará a URL padrão da OpenAI.",
+          "scope": "machine-overridable"
+        }
+      }
     }
   },
   "scripts": {

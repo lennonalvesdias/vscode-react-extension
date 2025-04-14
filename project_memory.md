@@ -12,11 +12,11 @@ O objetivo principal é agilizar o desenvolvimento e garantir a consistência do
 
 - **Interface Principal:** Uma Webview (`ChatViewProvider`) que exibe uma interface de chat inspirada no GitHub Copilot.
 - **Serviços Principais:**
-  - `OpenAIService`: Gerencia a comunicação com a API da OpenAI (GPT-3.5-turbo por padrão) para processamento de chat e análise de solicitações de código. **Deve ser instruído sobre as diretrizes do Soma Design System.**
+  - `OpenAIService`: Gerencia a comunicação com a API da OpenAI (GPT-3.5-turbo por padrão) para processamento de chat e análise de solicitações de código. **Agora suporta uma URL de API configurável.**
   - `CodeGenerationService`: Orquestra a geração de código. Recebe a descrição, prepara prompts detalhados para a OpenAI **incorporando as regras e componentes do Soma DS**, extrai o código gerado e cria os arquivos necessários.
   - `FileService`: Abstrai as operações de sistema de arquivos usando a API do VS Code (`vscode.workspace.fs`) para criar, ler, atualizar e verificar a existência de arquivos no workspace.
   - `ConfigurationService`: Gerencia a configuração da extensão, principalmente o armazenamento seguro e recuperação da API Key da OpenAI.
-- **Contexto do Agente (`AgentContext`):** Uma interface que mantém o estado e a configuração necessários para os serviços (API Key, modelo, configurações de prompt, estado do VS Code).
+- **Contexto do Agente (`AgentContext`):** Uma interface que mantém o estado e a configuração necessários para os serviços (API Key, modelo, configurações de prompt, estado do VS Code). **Incluindo apiUrl opcional.**
 
 **Nota:** A especificação menciona uma arquitetura multiagentes (Desenvolvedor, Design, Produto, Testes), mas a implementação atual foca principalmente nas funcionalidades do agente desenvolvedor (análise de prompt e geração de código) integradas ao `ChatViewProvider` e `OpenAIService`.
 
@@ -32,6 +32,8 @@ O objetivo principal é agilizar o desenvolvimento e garantir a consistência do
   - Armazenamento seguro da chave.
   - Feedback visual na interface quando a chave não está configurada, com botão para configurar.
   - Verificações em pontos críticos para garantir que a chave está presente antes de chamar a API.
+- **Configuração de URL da API OpenAI:**
+  - Configuração `psCopilot.apiUrl` nas configurações do VS Code permite definir uma URL personalizada (útil para proxies). Se vazia, usa a URL padrão da OpenAI.
 - **Geração de Código via Prompt:**
   - Detecção de intenção de geração de código a partir da mensagem do usuário (ex: "crie um componente", "gere uma página").
   - Análise da solicitação via OpenAI (`analyzeRequest`) para identificar o tipo principal (página, componente, hook, serviço), nome sugerido e componentes relacionados (como um serviço para uma página).
@@ -70,3 +72,4 @@ O objetivo principal é agilizar o desenvolvimento e garantir a consistência do
 - **Atualização de Ícones:** Os ícones da extensão foram redesenhados para refletir o tema "mosqueteiro" (PS Copilot -> "Product Setup" Copilot).
 - **Integração do Design System Soma:** As regras e a lista de componentes do Soma (definidas em `soma.txt`) foram incorporadas aos prompts de geração de código do `CodeGenerationService` para melhorar a aderência do código gerado.
 - **Identificação da Necessidade de Agente de Design:** A análise do `soma.txt` (`BeautifyPrompt`) reforçou a necessidade futura de um agente especializado em design para garantir a qualidade visual e aderência ao Soma.
+- **Configuração de URL da API OpenAI:** Adicionada a capacidade de configurar uma URL personalizada para a API OpenAI através das configurações do VS Code (`psCopilot.apiUrl`), permitindo o uso de proxies corporativos.

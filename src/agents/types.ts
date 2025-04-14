@@ -19,6 +19,7 @@ export interface AgentContext {
   temperature: number;
   maxTokens: number;
   timeout: number;
+  apiUrl?: string;
   extensionUri: vscode.Uri;
   extensionPath: string;
   globalState: vscode.Memento;

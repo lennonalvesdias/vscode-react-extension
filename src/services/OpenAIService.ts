@@ -4,7 +4,7 @@ import { AgentContext, AnalysisResult, CodeGenerationResult } from '../agents/ty
 export class OpenAIService {
   private apiKey = '';
   private model = 'gpt-3.5-turbo';
-  private apiUrl = 'https://api.openai.com/v1/chat/completions';
+  public apiUrl = 'https://api.openai.com/v1/chat/completions';
   private temperature = 0.7;
   private maxTokens = 2000;
   private timeout = 30000;
@@ -15,6 +15,7 @@ export class OpenAIService {
     this.temperature = context.temperature || 0.7;
     this.maxTokens = context.maxTokens || 2000;
     this.timeout = context.timeout || 30000;
+    this.apiUrl = context.apiUrl || this.apiUrl;
   }
 
   public setApiKey(apiKey: string): void {
