@@ -23,18 +23,6 @@
       {
         "command": "psCopilot.openChatInExplorer",
         "title": "Abrir PS Copilot Chat no Explorer"
-      },
-      {
-        "command": "psCopilot.manageAgents",
-        "title": "Gerenciar Agentes do PS Copilot"
-      },
-      {
-        "command": "psCopilot.configureApiKey",
-        "title": "PS Copilot: Configurar API Key da OpenAI"
-      },
-      {
-        "command": "psCopilot.clearApiKey",
-        "title": "PS Copilot: Remover API Key da OpenAI"
       }
     ],
     "viewsContainers": {
@@ -64,28 +52,44 @@
         }
       ]
     },
-    "menus": {
-      "view/title": [
-        {
-          "command": "psCopilot.manageAgents",
-          "when": "view == psCopilot.chatView",
-          "group": "navigation"
-        },
-        {
-          "command": "psCopilot.configureApiKey",
-          "when": "view == psCopilot.chatView",
-          "group": "navigation"
-        }
-      ]
-    },
     "configuration": {
       "title": "PS Copilot",
       "properties": {
-        "psCopilot.apiUrl": {
+        "psCopilot.apiKey": {
+          "type": "string",
+          "description": "Sua API Key da OpenAI.",
+          "default": "",
+          "markdownDescription": "Insira sua API Key da OpenAI ([obtenha uma aqui](https://platform.openai.com/account/api-keys)). Esta chave será usada apenas se o provedor selecionado for 'openai'.",
+          "order": 1
+        },
+        "psCopilot.provider": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "azure"
+          ],
+          "default": "openai",
+          "description": "Selecione o provedor de serviço LLM a ser utilizado.",
+          "order": 3
+        },
+        "psCopilot.azure.endpoint": {
           "type": "string",
           "default": "",
-          "description": "(Opcional) URL personalizada para a API OpenAI (ex: para usar um proxy corporativo). Se deixado em branco, usará a URL padrão da OpenAI.",
-          "scope": "machine-overridable"
+          "description": "(Azure) URL do seu recurso Azure OpenAI (ex: https://SEU-RECURSO.openai.azure.com). Obrigatório se o provedor for 'azure'.",
+          "order": 4
+        },
+        "psCopilot.azure.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "(Azure) Chave da API do seu recurso Azure OpenAI. Obrigatório se o provedor for 'azure'.",
+          "markdownDescription": "(Azure) Chave da API do seu recurso Azure OpenAI. Obrigatório se o provedor for 'azure'.",
+          "order": 5
+        },
+        "psCopilot.azure.deploymentName": {
+          "type": "string",
+          "default": "",
+          "description": "(Azure) Nome do deployment (modelo) no seu recurso Azure OpenAI (ex: gpt-4o-deploy). Obrigatório se o provedor for 'azure'. Este valor será usado como o nome do modelo nas chamadas.",
+          "order": 6
         }
       }
     }

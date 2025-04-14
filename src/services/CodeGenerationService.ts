@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { OpenAIService } from './OpenAIService';
 import { FileService } from './FileService';
-import { AgentContext } from '../agents/types';
 import { DeveloperAgent } from '../agents/DeveloperAgent';
 import { TestAgent } from '../agents/TestAgent';
 import { DesignAgent } from '../agents/DesignAgent';
@@ -40,10 +39,9 @@ export class CodeGenerationService {
   private testAgent: TestAgent;
   private designAgent: DesignAgent;
 
-  constructor(context: AgentContext) {
-    this.openAIService = new OpenAIService(context);
+  constructor() {
+    this.openAIService = new OpenAIService();
     this.fileService = new FileService();
-
     this.developerAgent = new DeveloperAgent(this.openAIService);
     this.testAgent = new TestAgent(this.openAIService);
     this.designAgent = new DesignAgent(this.openAIService);
@@ -55,7 +53,7 @@ export class CodeGenerationService {
    */
   public async generateReactComponent(request: ComponentGenerationRequest): Promise<GeneratedFile[]> {
     if (!this.openAIService.hasApiKey()) {
-      throw new Error('API Key não configurada');
+      throw new Error('Credenciais do provedor LLM não configuradas ou inválidas.');
     }
 
     if (!request.name) {
@@ -72,67 +70,63 @@ export class CodeGenerationService {
       request.path = this.getDefaultPath(request.type, request.name);
     }
 
-    // Etapa 1: Gerar código principal com o DeveloperAgent
+    // Etapa 1: Gerar código principal
     let mainCode: string;
     try {
       mainCode = await this.developerAgent.generateMainCode(request);
     } catch (error) {
       console.error("Erro fatal ao gerar código principal:", error);
       vscode.window.showErrorMessage(`Erro ao gerar código principal: ${error instanceof Error ? error.message : error}`);
-      throw error; // Re-lança para interromper o fluxo
+      throw error; // Interrompe o fluxo
     }
 
-    // Etapa 2: Gerar testes com o TestAgent
-    // Roda em paralelo com a análise de design para otimizar tempo
+    // Etapa 2 e 3: Gerar testes e análise de design (paralelo)
     const testPromise = this.testAgent.generateTests(mainCode, request.description)
       .catch(error => {
         console.error("Erro ao gerar testes (não fatal):", error);
-        return "// Falha ao gerar testes automaticamente."; // Retorna placeholder em caso de erro
+        return "// Falha ao gerar testes automaticamente."; // Placeholder
       });
 
-    // Etapa 3: Analisar design com o DesignAgent
-    // Roda em paralelo com a geração de testes
     const designAnalysisPromise = this.designAgent.analyzeDesign(mainCode, request.description)
       .catch(error => {
         console.error("Erro ao analisar design (não fatal):", error);
-        return "/* Falha na análise de design. */"; // Retorna placeholder em caso de erro
+        return "/* Falha na análise de design. */"; // Placeholder
       });
 
-    // Aguarda a conclusão das tarefas paralelas
     const [testCode, designAnalysis] = await Promise.all([testPromise, designAnalysisPromise]);
 
-    // Etapa 4: Extrair/montar arquivos finais com base nos resultados dos agentes
+    // Etapa 4: Extrair/montar arquivos
     const files = this.extractFiles(mainCode, testCode, designAnalysis, request);
 
-    // Etapa 5: Criar arquivos no workspace
+    // Etapa 5: Criar/atualizar arquivos no workspace
     const createdFiles: GeneratedFile[] = [];
     for (const file of files) {
       const exists = await this.fileService.fileExists(file.path);
       if (exists) {
-        // Se o arquivo já existir, perguntar se deseja sobrescrever
         const overwrite = await vscode.window.showQuickPick(['Sim', 'Não'], {
           placeHolder: `O arquivo ${file.path} já existe. Deseja sobrescrever?`
         });
 
         if (overwrite === 'Sim') {
           await this.fileService.updateFile(file.path, file.content);
+          createdFiles.push(file);
         }
+        // Se não sobrescrever, não adiciona a createdFiles
       } else {
         await this.fileService.createFile(file.path, file.content);
+        createdFiles.push(file);
       }
-      createdFiles.push(file); // Adiciona à lista de arquivos realmente criados/atualizados
     }
 
-    // Retorna apenas os arquivos que foram efetivamente criados ou confirmados para sobrescrita
     return createdFiles;
   }
 
   /**
-   * Extrai os arquivos do texto gerado pelo OpenAI
-   * @param mainCode Código principal gerado pelo OpenAI
-   * @param testCode Código de teste gerado pelo OpenAI
-   * @param designAnalysis Análise de design gerada pelo OpenAI
-   * @param request Detalhes do componente
+   * Monta a estrutura de arquivos finais com base nos resultados dos agentes.
+   * @param mainCode Código principal gerado
+   * @param testCode Código de teste gerado
+   * @param designAnalysis Análise de design gerada
+   * @param request Detalhes da solicitação original
    */
   private extractFiles(
     mainCode: string,
@@ -141,10 +135,9 @@ export class CodeGenerationService {
     request: ComponentGenerationRequest
   ): GeneratedFile[] {
     const files: GeneratedFile[] = [];
-    const { type, path: basePath = '', name } = request; // Usa request desestruturado
-    const componentName = name.charAt(0).toUpperCase() + name.slice(1); // Capitaliza nome
+    const { type, path: basePath = '', name } = request;
+    const componentName = name.charAt(0).toUpperCase() + name.slice(1);
 
-    // Adiciona a análise de design como comentário no início do código principal
     const mainCodeWithAnalysis = `/*\nAnálise de Design e Acessibilidade:\n${designAnalysis}\n*/\n\n${mainCode}`;
 
     switch (type) {
@@ -154,22 +147,9 @@ export class CodeGenerationService {
         const indexFilePath = `${basePath}/index.tsx`;
         const cssFilePath = `${basePath}/${componentName}.module.css`;
 
-        // Arquivo Principal (.tsx)
         files.push({ path: mainFilePath, content: mainCodeWithAnalysis });
-
-        // Arquivo de Teste (.test.tsx)
-        if (testCode) {
-          files.push({ path: testFilePath, content: testCode });
-        } else {
-          // Gera um teste básico se o agente falhou
-          files.push({ path: testFilePath, content: this.generateBasicTest(componentName, type) });
-        }
-
-        // Arquivo Index (index.tsx)
+        files.push({ path: testFilePath, content: testCode || this.generateBasicTest(componentName, type) });
         files.push({ path: indexFilePath, content: `export { default } from './${componentName}';\n` });
-
-        // Arquivo CSS Module (.module.css) - Gerar vazio por padrão
-        // A lógica de geração pode adicionar estilos aqui se detectar necessidade
         files.push({ path: cssFilePath, content: `/* Estilos para ${componentName} */\n` });
         break;
       }
@@ -177,32 +157,20 @@ export class CodeGenerationService {
         const hookFileName = `use${componentName}`;
         const mainFilePath = `${basePath}/${hookFileName}.ts`;
         const testFilePath = `${basePath}/${hookFileName}.test.ts`;
+        const hookCodeWithAnalysis = `/*\nAnálise:\n${designAnalysis}\n*/\n\n${mainCode}`;
 
-        // Arquivo Principal (.ts) - Análise de design pode ser menos relevante aqui, mas incluímos por consistência
-        files.push({ path: mainFilePath, content: `/*\nAnálise:\n${designAnalysis}\n*/\n\n${mainCode}` });
-
-        // Arquivo de Teste (.test.ts)
-        if (testCode) {
-          files.push({ path: testFilePath, content: testCode });
-        } else {
-          files.push({ path: testFilePath, content: this.generateBasicTest(hookFileName, type) });
-        }
+        files.push({ path: mainFilePath, content: hookCodeWithAnalysis });
+        files.push({ path: testFilePath, content: testCode || this.generateBasicTest(hookFileName, type) });
         break;
       }
       case 'service': {
         const serviceFileName = `${componentName}Service`;
         const mainFilePath = `${basePath}/${serviceFileName}.ts`;
         const testFilePath = `${basePath}/${serviceFileName}.test.ts`;
+        const serviceCodeWithAnalysis = `/*\nAnálise:\n${designAnalysis}\n*/\n\n${mainCode}`;
 
-        // Arquivo Principal (.ts)
-        files.push({ path: mainFilePath, content: `/*\nAnálise:\n${designAnalysis}\n*/\n\n${mainCode}` });
-
-        // Arquivo de Teste (.test.ts)
-        if (testCode) {
-          files.push({ path: testFilePath, content: testCode });
-        } else {
-          files.push({ path: testFilePath, content: this.generateBasicTest(serviceFileName, type) });
-        }
+        files.push({ path: mainFilePath, content: serviceCodeWithAnalysis });
+        files.push({ path: testFilePath, content: testCode || this.generateBasicTest(serviceFileName, type) });
         break;
       }
       case 'page': {
@@ -212,26 +180,15 @@ export class CodeGenerationService {
         const indexFilePath = `${basePath}/index.tsx`;
         const cssFilePath = `${basePath}/${pageFileName}.module.css`;
 
-        // Arquivo Principal (.tsx)
         files.push({ path: mainFilePath, content: mainCodeWithAnalysis });
-
-        // Arquivo de Teste (.test.tsx)
-        if (testCode) {
-          files.push({ path: testFilePath, content: testCode });
-        } else {
-          files.push({ path: testFilePath, content: this.generateBasicTest(pageFileName, type) });
-        }
-
-        // Arquivo Index (index.tsx)
+        files.push({ path: testFilePath, content: testCode || this.generateBasicTest(pageFileName, type) });
         files.push({ path: indexFilePath, content: `export { default } from './${pageFileName}';\n` });
-
-        // Arquivo CSS Module (.module.css)
         files.push({ path: cssFilePath, content: `/* Estilos para ${pageFileName} */\n` });
         break;
       }
     }
 
-    // Normalizar caminhos (remover ./)
+    // Normalizar caminhos
     return files.map(file => ({
       ...file,
       path: file.path.replace(/^\.\//, '')

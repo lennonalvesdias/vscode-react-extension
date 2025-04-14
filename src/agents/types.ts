@@ -14,17 +14,20 @@ export interface Agent {
 }
 
 export interface AgentContext {
-  apiKey: string;
+  apiKey?: string;
   model: string;
   temperature: number;
   maxTokens: number;
   timeout: number;
-  apiUrl?: string;
   extensionUri: vscode.Uri;
   extensionPath: string;
   globalState: vscode.Memento;
   workspaceState: vscode.Memento;
   configuration?: vscode.WorkspaceConfiguration;
+  provider?: 'openai' | 'azure';
+  azureEndpoint?: string;
+  azureApiKey?: string;
+  azureDeploymentName?: string;
 }
 
 export interface AnalysisResult {

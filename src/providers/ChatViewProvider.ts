@@ -1,8 +1,5 @@
 import * as vscode from 'vscode';
 import { OpenAIService } from '../services/OpenAIService';
-import { AgentContext } from '../agents/types';
-import { ConfigurationService } from '../services/ConfigurationService';
-import { onApiKeyConfigured } from '../extension';
 import { CodeGenerationService } from '../services/CodeGenerationService';
 
 interface ChatMessage {
@@ -16,100 +13,66 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private _view?: vscode.WebviewView;
   private _messages: ChatMessage[] = [];
-  private _selectedModel = 'gpt-3.5-turbo';
+  private _selectedModel = 'gpt-4o';
   private _availableModels = [
     'gpt-3.5-turbo',
     'gpt-4',
     'gpt-4-turbo',
     'gpt-4o'
   ];
-  private _openAIService: OpenAIService;
-  private _configService: ConfigurationService;
-  private _codeGenerationService: CodeGenerationService;
+  private _openAIService: OpenAIService | null = null;
+  private _codeGenerationService: CodeGenerationService | null = null;
   private _isProcessing = false;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
     private readonly _context: vscode.ExtensionContext
   ) {
-    this._selectedModel = this._context.globalState.get<string>('selectedModel') || 'gpt-3.5-turbo';
+    this._selectedModel = this._context.globalState.get<string>('selectedModel') || 'gpt-4o';
 
-    const config = vscode.workspace.getConfiguration('psCopilot');
-    const customApiUrl = config.get<string>('apiUrl');
+    try {
+      this._openAIService = new OpenAIService();
+      this._codeGenerationService = new CodeGenerationService();
 
-    const agentContext: AgentContext = {
-      apiKey: '',
-      model: this._selectedModel,
-      apiUrl: customApiUrl || undefined,
-      temperature: 0.7,
-      maxTokens: 2000,
-      timeout: 30000,
-      extensionUri: _extensionUri,
-      extensionPath: _extensionUri.fsPath,
-      globalState: _context.globalState,
-      workspaceState: _context.workspaceState,
-      configuration: config
-    };
+      console.log('ChatViewProvider: Serviços inicializados.');
 
-    this._configService = new ConfigurationService(agentContext);
-    this._openAIService = new OpenAIService(agentContext);
-    this._codeGenerationService = new CodeGenerationService(agentContext);
+      this.showWelcomeOrStatusMessage();
 
-    this._loadApiKey();
+    } catch (error) {
+      console.error("Erro ao inicializar serviços no ChatViewProvider:", error);
+    }
 
-    this._configService.hasApiKey().then(hasApiKey => {
-      if (!hasApiKey) {
-        this._messages.push({
-          text: 'Bem-vindo ao PS Copilot! Para começar, você precisa configurar sua API Key da OpenAI. Clique no botão "Configurar API Key" quando aparecer na notificação ou use o comando "PS Copilot: Configurar API Key da OpenAI" na paleta de comandos (Ctrl+Shift+P).',
-          sender: 'assistant',
-          timestamp: new Date()
-        });
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('psCopilot')) {
+        console.log('Configurações do PS Copilot mudaram, atualizando Webview se necessário...');
+        this._updateWebview();
       }
-    });
-
-    onApiKeyConfigured(() => {
-      this._loadApiKey();
-      this._updateWebview();
-      this._messages.push({
-        text: 'API Key configurada com sucesso! Agora você pode começar a fazer perguntas.',
-        sender: 'assistant',
-        timestamp: new Date()
-      });
-      this._updateWebview();
     });
   }
 
-  private async _loadApiKey() {
-    try {
-      const apiKey = await this._configService.getApiKey();
-      const config = vscode.workspace.getConfiguration('psCopilot');
-      const customApiUrl = config.get<string>('apiUrl');
-
-      const agentContext: AgentContext = {
-        apiKey: apiKey || '',
-        model: this._selectedModel,
-        apiUrl: customApiUrl || undefined,
-        temperature: 0.7,
-        maxTokens: 2000,
-        timeout: 30000,
-        extensionUri: this._extensionUri,
-        extensionPath: this._extensionUri.fsPath,
-        globalState: this._context.globalState,
-        workspaceState: this._context.workspaceState,
-        configuration: config
-      };
-
-      this._openAIService = new OpenAIService(agentContext);
-      this._codeGenerationService = new CodeGenerationService(agentContext);
-
-      if (apiKey) {
-        console.log('API Key e URL carregadas e serviços atualizados com sucesso');
+  private async showWelcomeOrStatusMessage() {
+    if (!this._openAIService || !this._openAIService.hasApiKey()) {
+      const provider = vscode.workspace.getConfiguration('psCopilot').get<'openai' | 'azure'>('provider') || 'openai';
+      let configMsg = 'Configure suas credenciais nas configurações do VS Code.';
+      if (provider === 'azure') {
+        configMsg = 'Configure o Endpoint, API Key e Deployment Name do Azure OpenAI nas configurações.';
       } else {
-        console.log('Nenhuma API Key encontrada, usando URL padrão/configurada');
+        configMsg = 'Configure sua API Key da OpenAI nas configurações.';
       }
-    } catch (error) {
-      console.error('Erro ao carregar API Key/URL:', error);
+      this.addMessage(`Bem-vindo ao PS Copilot! Para começar, ${configMsg}`, 'assistant');
+    } else {
+      console.log('OpenAIService está pronto.');
     }
+    this._updateWebview();
+  }
+
+  private addMessage(text: string, sender: 'user' | 'assistant') {
+    this._messages.push({
+      text: text,
+      sender: sender,
+      timestamp: new Date()
+    });
+    this._updateWebview();
   }
 
   public async resolveWebviewView(
@@ -133,34 +96,36 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             try {
               if (this._isProcessing) { return; }
 
-              const userMessage: ChatMessage = {
-                text: message.text,
-                sender: 'user',
-                timestamp: new Date()
-              };
-              this._messages.push(userMessage);
-
-              await this._updateWebview();
+              this.addMessage(message.text, 'user');
 
               this._isProcessing = true;
-              await this._updateWebview();
+              this._updateWebview();
+
+              if (!this._openAIService || !this._codeGenerationService) {
+                throw new Error("Serviços de IA não inicializados corretamente.");
+              }
+
+              if (!this._openAIService.hasApiKey()) {
+                const provider = vscode.workspace.getConfiguration('psCopilot').get<'openai' | 'azure'>('provider') || 'openai';
+                let errorMsg = 'Credenciais não configuradas. ';
+                if (provider === 'azure') {
+                  errorMsg += 'Verifique Endpoint, API Key e Deployment Name do Azure.';
+                } else {
+                  errorMsg += 'Verifique a API Key da OpenAI.';
+                }
+                throw new Error(errorMsg);
+              }
 
               const response = await this._processMessage(message.text);
+              this.addMessage(response, 'assistant');
 
-              const assistantMessage: ChatMessage = {
-                text: response,
-                sender: 'assistant',
-                timestamp: new Date()
-              };
-              this._messages.push(assistantMessage);
-
-              this._isProcessing = false;
-
-              await this._updateWebview();
             } catch (error) {
+              const errorText = `Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
+              this.addMessage(errorText, 'assistant');
+              vscode.window.showErrorMessage(errorText);
+            } finally {
               this._isProcessing = false;
-              vscode.window.showErrorMessage('Erro ao processar mensagem: ' + error);
-              await this._updateWebview();
+              this._updateWebview();
             }
             break;
           case 'clearChat':
@@ -170,11 +135,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           case 'changeModel':
             this._selectedModel = message.model;
             this._context.globalState.update('selectedModel', this._selectedModel);
-            vscode.window.showInformationMessage(`Modelo alterado para: ${this._selectedModel}`);
+            vscode.window.showInformationMessage(`Seleção de modelo na UI alterada para: ${this._selectedModel}. A configuração real usada depende do provedor.`);
             await this._updateWebview();
-            break;
-          case 'configApiKey':
-            vscode.commands.executeCommand('psCopilot.configureApiKey');
             break;
         }
       }
@@ -182,41 +144,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async _processMessage(text: string): Promise<string> {
+    if (!this._openAIService || !this._codeGenerationService) {
+      throw new Error("Serviços de IA não inicializados.");
+    }
     try {
-      const apiKey = await this._configService.getApiKey();
-      if (!apiKey) {
-        vscode.window.showErrorMessage(
-          'API Key da OpenAI não configurada',
-          'Configurar API Key'
-        ).then(selection => {
-          if (selection === 'Configurar API Key') {
-            vscode.commands.executeCommand('psCopilot.configureApiKey');
-          }
-        });
-
-        return 'API Key não configurada. Por favor, clique no botão "Configurar API Key" na notificação acima ou use o comando "PS Copilot: Configurar API Key da OpenAI" na paleta de comandos (Ctrl+Shift+P).';
-      }
-
       if (this._isCodeGenerationRequest(text)) {
         return await this._handleCodeGeneration(text);
       }
-
       return await this._openAIService.chat(text);
     } catch (error) {
       console.error('Erro ao processar mensagem:', error);
-
-      if (error instanceof Error && error.message.includes('API Key não configurada')) {
-        vscode.window.showErrorMessage(
-          'API Key da OpenAI não configurada',
-          'Configurar API Key'
-        ).then(selection => {
-          if (selection === 'Configurar API Key') {
-            vscode.commands.executeCommand('psCopilot.configureApiKey');
-          }
-        });
-      }
-
-      return `Ocorreu um erro ao processar sua mensagem: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
+      throw error;
     }
   }
 
@@ -261,44 +199,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async _handleCodeGeneration(text: string): Promise<string> {
+    if (!this._openAIService || !this._codeGenerationService) {
+      throw new Error("Serviços de IA não inicializados.");
+    }
     try {
-      const apiKey = await this._configService.getApiKey();
-      const config = vscode.workspace.getConfiguration('psCopilot');
-      const customApiUrl = config.get<string>('apiUrl');
-
-      if (!apiKey) {
-        vscode.window.showErrorMessage(
-          'API Key da OpenAI não configurada',
-          'Configurar API Key'
-        ).then(selection => {
-          if (selection === 'Configurar API Key') {
-            vscode.commands.executeCommand('psCopilot.configureApiKey');
-          }
-        });
-
-        return 'Não foi possível gerar o código porque a API Key não está configurada. Por favor, clique no botão "Configurar API Key" na notificação acima ou use o comando "PS Copilot: Configurar API Key da OpenAI" na paleta de comandos (Ctrl+Shift+P).';
-      }
-
       if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
         return 'Não foi possível gerar o código porque nenhum workspace está aberto. Abra um projeto para gerar código.';
       }
-
-      const agentContext: AgentContext = {
-        apiKey: apiKey,
-        model: this._selectedModel,
-        apiUrl: customApiUrl || undefined,
-        temperature: 0.7,
-        maxTokens: 2000,
-        timeout: 30000,
-        extensionUri: this._extensionUri,
-        extensionPath: this._extensionUri.fsPath,
-        globalState: this._context.globalState,
-        workspaceState: this._context.workspaceState,
-        configuration: config
-      };
-
-      this._openAIService = new OpenAIService(agentContext);
-      this._codeGenerationService = new CodeGenerationService(agentContext);
 
       console.log('Identificando artefatos necessários a partir do texto...');
       const artifacts = this._identifyRequiredArtifacts(text);
@@ -354,21 +261,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       return `✅ Código gerado com sucesso!\n\nArquivos criados:\n${fileList}\n\nOs arquivos foram criados no workspace e abertos no editor.`;
     } catch (error) {
       console.error('Erro na geração de código:', error);
-
-      if (error instanceof Error && error.message.includes('API Key não configurada')) {
-        vscode.window.showErrorMessage(
-          'API Key da OpenAI não configurada',
-          'Configurar API Key'
-        ).then(selection => {
-          if (selection === 'Configurar API Key') {
-            vscode.commands.executeCommand('psCopilot.configureApiKey');
-          }
-        });
-
-        return `❌ Erro ao gerar código: API Key não configurada. Por favor, clique no botão "Configurar API Key" na notificação acima ou use o comando "PS Copilot: Configurar API Key da OpenAI" na paleta de comandos (Ctrl+Shift+P).`;
-      }
-
-      return `❌ Erro ao gerar código: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
+      throw error;
     }
   }
 
@@ -729,30 +622,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
     `;
 
-    const hasApiKey = await this._configService.hasApiKey();
+    const provider = vscode.workspace.getConfiguration('psCopilot').get<'openai' | 'azure'>('provider') || 'openai';
+    let isConfigOk = false;
+    if (provider === 'azure') {
+      const azureKey = vscode.workspace.getConfiguration('psCopilot.azure').get<string>('apiKey');
+      const azureEndpoint = vscode.workspace.getConfiguration('psCopilot.azure').get<string>('endpoint');
+      const azureDeployment = vscode.workspace.getConfiguration('psCopilot.azure').get<string>('deploymentName') || vscode.workspace.getConfiguration('psCopilot').get<string>('model');
+      isConfigOk = !!azureKey && !!azureEndpoint && !!azureDeployment;
+    } else {
+      const apiKey = vscode.workspace.getConfiguration('psCopilot').get<string>('apiKey');
+      isConfigOk = !!apiKey;
+    }
 
     let messagesHtml = '';
-
-    if (this._messages.length === 0) {
-      messagesHtml = `
-        <div class="empty-state">
-          <h3>Bem-vindo ao PS Copilot</h3>
-          <p>
-            Assistente de desenvolvimento React com múltiplos agentes especializados.<br>
-            Faça perguntas sobre desenvolvimento, design, arquitetura ou testes.<br><br>
-            <strong>Exemplos de comandos:</strong><br>
-            • "Crie um componente de botão com variações de tamanho e cor"<br>
-            • "Desenvolva um hook para gerenciar autenticação com JWT"<br>
-            • "Implemente um serviço para comunicação com a API de produtos"<br>
-            • "Crie uma página de dashboard com gráficos e filtros"
-          </p>
-          ${!hasApiKey ? `
-          <div class="empty-state-actions">
-            <button id="configApiKeyBtn" class="action-button">Configurar API Key</button>
-          </div>
-          ` : ''}
-        </div>
-      `;
+    if (this._messages.length === 0 && !isConfigOk) {
+      messagesHtml = `<div class="empty-state">... Para começar, configure as credenciais ${provider === 'azure' ? 'Azure' : 'OpenAI'} nas Configurações...</div>`;
+    } else if (this._messages.length === 0) {
+      messagesHtml = `<div class="empty-state">... Bem-vindo! Faça sua pergunta...</div>`;
     } else {
       for (const message of this._messages) {
         const messageClass = message.sender === 'user' ? 'user-message' : 'assistant-message';
@@ -799,7 +685,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       const sendButton = document.getElementById('sendButton');
       const modelSelector = document.getElementById('modelSelector');
       const clearButton = document.getElementById('clearButton');
-      const configApiKeyBtn = document.getElementById('configApiKeyBtn');
 
       function adjustTextareaHeight() {
         textarea.style.height = 'auto';
@@ -853,14 +738,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       });
 
       scrollToBottom();
-
-      if (configApiKeyBtn) {
-        configApiKeyBtn.addEventListener('click', () => {
-          vscode.postMessage({
-            command: 'configApiKey'
-          });
-        });
-      }
     `;
 
     return `<!DOCTYPE html>
