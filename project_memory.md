@@ -30,8 +30,9 @@ A arquitetura segue uma abordagem baseada em componentes do VS Code e serviços 
 4.  **`CodeGenerationService`**:
     - **Responsabilidade Principal:** Orquestra o fluxo de geração de código multiagente.
     - Recebe a solicitação de geração do `ChatViewProvider`.
-    - Instancia os agentes necessários (`DeveloperAgent`, `TestAgent`, `DesignAgent`).
+    - Instancia os agentes necessários (`DeveloperAgent`, `TestAgent`, `DesignAgent`, `PromptClassifierAgent`).
     - Chama os agentes em sequência (ou paralelo quando possível) para:
+      - Analisar a intenção do usuário (`PromptClassifierAgent`).
       - Gerar o código principal (`DeveloperAgent`).
       - Gerar os testes (`TestAgent`).
       - Analisar a conformidade de design e acessibilidade (`DesignAgent`).
@@ -41,6 +42,7 @@ A arquitetura segue uma abordagem baseada em componentes do VS Code e serviços 
     - Cada agente encapsula uma especialidade específica.
     - **Responsabilidade Principal:** Construir o prompt (System Prompt e User Content) adequado para sua tarefa e chamar o método correspondente no `OpenAIService`.
     - Agentes Atuais:
+      - `PromptClassifierAgent`: Determina se a intenção do usuário é gerar código ou simplesmente conversar.
       - `DeveloperAgent`: Gera o código principal do componente/hook/serviço/página.
       - `TestAgent`: Gera o código de teste (Jest/RTL).
       - `DesignAgent`: Analisa a conformidade com o Design System Soma e acessibilidade.
@@ -107,6 +109,15 @@ A arquitetura segue uma abordagem baseada em componentes do VS Code e serviços 
 - **Remoção do Formulário de Geração:** A geração agora é acionada pela análise do prompt do usuário no chat.
 - **Refatoração do `FileService`:** Resolveu problemas de compilação com Webpack ao usar apenas `vscode.workspace.fs`.
 - **Melhoria na Detecção de Solicitações:** A lógica para identificar intenção de geração (`_isCodeGenerationRequest`) e os artefatos (`_identifyRequiredArtifacts`) foi aprimorada no `ChatViewProvider` (removida a dependência de `analyzeRequest`).
+- **Análise de Intenção Baseada em IA:**
+  - Implementação de um novo fluxo que utiliza o modelo de linguagem para analisar e classificar se a mensagem do usuário é uma solicitação de geração de código ou uma conversa normal.
+  - Criação do `PromptClassifierAgent` como um agente dedicado à classificação de intenções.
+  - Adição do método `makeRequest` público no `OpenAIService` para permitir chamadas diretas pelos agentes.
+  - Remoção do método antigo `analyzeUserIntent` do `OpenAIService` e movido para `PromptClassifierAgent`.
+  - Implementação de método `analyzeUserIntent` no `CodeGenerationService` que utiliza o novo agente.
+  - Atualização do `_processMessage` no `ChatViewProvider` para usar essa nova funcionalidade.
+  - Implementação de fallback para o método baseado em padrões (`_isCodeGenerationRequest`) em caso de erro na análise via IA.
+  - Feedback visual ao usuário sobre a decisão da IA antes de iniciar a geração de código.
 - **Correção de API Key:** Implementadas verificações robustas e carregamento/atualização da API Key nos serviços.
 - **Atualização de Ícones:** Ícones redesenhados.
 - **Integração do Design System Soma:** Regras e componentes Soma incluídos nos prompts dos agentes.

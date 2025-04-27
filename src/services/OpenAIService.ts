@@ -118,7 +118,13 @@ export class OpenAIService {
     }
   }
 
-  private async makeRequest(systemPrompt: string, userContent: string): Promise<string> {
+  /**
+   * Realiza uma requisição para a API OpenAI com um prompt de sistema e conteúdo do usuário
+   * @param systemPrompt O prompt do sistema que define o comportamento da IA
+   * @param userContent O conteúdo enviado pelo usuário
+   * @returns A resposta de texto da API
+   */
+  public async makeRequest(systemPrompt: string, userContent: string): Promise<string> {
     this.validateProviderConfiguration();
     if (!this.openai) { throw new Error('OpenAI client not available'); }
 
@@ -159,8 +165,6 @@ export class OpenAIService {
       throw new Error(`Erro ao comunicar com a API OpenAI: ${error.message}`);
     }
   }
-
-  // *** Métodos Públicos Simplificados ***
 
   /**
    * Realiza uma chamada genérica para chat.

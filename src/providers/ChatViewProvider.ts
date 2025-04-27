@@ -166,54 +166,31 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       throw new Error("Serviços de IA não inicializados.");
     }
     try {
-      if (this._isCodeGenerationRequest(text)) {
-        return await this._handleCodeGeneration(text);
+      // Usar análise de intenção baseada em IA através do PromptClassifierAgent
+      console.log('Analisando intenção da mensagem com PromptClassifierAgent...');
+
+      try {
+        const intentAnalysis = await this._codeGenerationService.analyzeUserIntent(text);
+        console.log(`Resultado da análise de intenção: ${intentAnalysis.isCodeGeneration ? 'GERAÇÃO DE CÓDIGO' : 'CONVERSA NORMAL'}`);
+        console.log(`Explicação: ${intentAnalysis.explanation}`);
+
+        if (intentAnalysis.isCodeGeneration) {
+          // Adicionar mensagem informativa
+          this.addMessage(`🤖 Identifiquei que você deseja gerar código: ${intentAnalysis.explanation}`, 'assistant');
+          return await this._handleCodeGeneration(text);
+        }
+
+        return await this._openAIService.chat(text);
+      } catch (intentError) {
+        // Se ocorrer erro na análise de intenção, usar chat como fallback
+        console.warn('Erro na análise de intenção via PromptClassifierAgent, usando chat como fallback:', intentError);
+
+        return await this._openAIService.chat(text);
       }
-      return await this._openAIService.chat(text);
     } catch (error) {
       console.error('Erro ao processar mensagem:', error);
       throw error;
     }
-  }
-
-  private _isCodeGenerationRequest(text: string): boolean {
-    const lowerText = text.toLowerCase();
-
-    const codeGenPatterns = [
-      'crie um componente',
-      'criar componente',
-      'crie uma página',
-      'criar página',
-      'crie um hook',
-      'criar hook',
-      'crie um serviço',
-      'criar serviço',
-      'gere um componente',
-      'gerar componente',
-      'implemente um componente',
-      'implementar componente',
-      'desenvolva um componente',
-      'desenvolver componente',
-      'gere uma página',
-      'desenvolva uma página',
-      'implemente uma página',
-      'gere uma interface',
-      'desenvolva uma interface',
-      'gere um formulário',
-      'crie um formulário',
-      'gere um serviço',
-      'gere um hook',
-      'crie um módulo',
-      'gere um módulo',
-      'código para',
-      'implementação de',
-      'desenvolver um',
-      'desenvolva um',
-      'construa um',
-      'construir um'
-    ];
-
-    return codeGenPatterns.some(pattern => lowerText.includes(pattern));
   }
 
   private async _handleCodeGeneration(text: string): Promise<string> {

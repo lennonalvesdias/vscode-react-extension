@@ -4,6 +4,7 @@ import { FileService } from './FileService';
 import { DeveloperAgent } from '../agents/DeveloperAgent';
 import { TestAgent } from '../agents/TestAgent';
 import { DesignAgent } from '../agents/DesignAgent';
+import { PromptClassifierAgent } from '../agents/PromptClassifierAgent';
 
 /**
  * Interface para representar uma solicitação de geração de componente React
@@ -38,6 +39,7 @@ export class CodeGenerationService {
   private developerAgent: DeveloperAgent;
   private testAgent: TestAgent;
   private designAgent: DesignAgent;
+  private promptClassifierAgent: PromptClassifierAgent;
 
   constructor() {
     this.openAIService = new OpenAIService();
@@ -45,6 +47,7 @@ export class CodeGenerationService {
     this.developerAgent = new DeveloperAgent(this.openAIService);
     this.testAgent = new TestAgent(this.openAIService);
     this.designAgent = new DesignAgent(this.openAIService);
+    this.promptClassifierAgent = new PromptClassifierAgent(this.openAIService);
   }
 
   /**
@@ -245,5 +248,14 @@ import ${hookName} from './${hookName}';\n\ndescribe('${hookName}', () => {\n  i
         // Fallback para outros tipos (menos comum)
         return `src/${type}s/${name}`;
     }
+  }
+
+  /**
+   * Analisa a intenção da mensagem do usuário
+   * @param message Mensagem do usuário
+   * @returns Resultado da análise
+   */
+  public async analyzeUserIntent(message: string) {
+    return this.promptClassifierAgent.analyzeUserIntent(message);
   }
 }
