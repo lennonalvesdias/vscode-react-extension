@@ -10,7 +10,7 @@ O objetivo principal é agilizar o desenvolvimento e garantir a consistência do
 
 ## 2. Arquitetura
 
-A extensão segue uma arquitetura baseada em componentes do VS Code e serviços desacoplados:
+A arquitetura segue uma abordagem baseada em componentes do VS Code e serviços desacoplados:
 
 1.  **`ChatViewProvider`**: Implementa `WebviewViewProvider`. É responsável por:
     - Renderizar a interface do chat (HTML/CSS/JS) na Webview.
@@ -63,6 +63,9 @@ A extensão segue uma arquitetura baseada em componentes do VS Code e serviços 
   - Seleção de modelo de LLM (GPT-3.5-turbo, GPT-4, etc.).
   - Botão para limpar o chat.
   - Indicador visual de processamento.
+  - Renderização de markdown com suporte a realce de sintaxe em blocos de código.
+  - Botão de cópia para blocos de código com identificação automática de linguagem.
+  - Design responsivo e adaptado ao tema do VS Code.
 - **Configuração:**
   - As credenciais (API Key OpenAI ou Azure Endpoint/Key/Deployment) são definidas diretamente nas configurações do VS Code.
   - **Seleção de Provedor:** Usuário pode escolher entre OpenAI e Azure OpenAI via configuração `psCopilot.provider`.
@@ -125,6 +128,26 @@ A extensão segue uma arquitetura baseada em componentes do VS Code e serviços 
   - `ConfigurationService` e `SecurityService` foram simplificados, removendo a lógica de armazenamento/recuperação de chaves API via `globalState` ou secure storage.
   - `OpenAIService` agora lê as credenciais diretamente das configurações do VS Code ao ser inicializado e quando as configurações mudam.
   - `ChatViewProvider` foi atualizado para remover a dependência do `ConfigurationService` para chaves API e verifica o status da configuração lendo diretamente as configurações.
+- **Melhorias na Interface de Chat:**
+  - Refatoração completa da estrutura de layout para garantir que as mensagens apareçam sempre acima do campo de entrada.
+  - Implementação de um contêiner de lista de mensagens para melhor organização visual.
+  - Uso explícito da propriedade `order` no CSS para garantir a sequência correta dos elementos (cabeçalho, mensagens, campo de entrada).
+  - Correção de problemas de rolagem automática para a última mensagem.
+- **Realce de Sintaxe e Cópia de Código:**
+  - Integração com PrismJS para destacar a sintaxe de código em diferentes linguagens.
+  - Adição de botão de cópia para blocos de código com feedback visual ("Copiado!").
+  - Detecção automática de linguagem de programação nos blocos de código.
+  - Adição de cabeçalho nos blocos de código exibindo a linguagem detectada.
+- **Unificação Visual com o VS Code:**
+  - Uso de variáveis de tema nativas do VS Code para adaptação ao tema atual do usuário.
+  - Remoção de cores fixas em favor de variáveis CSS derivadas do tema do VS Code.
+  - Melhoria no contraste e legibilidade de elementos.
+  - Esquema de cores unificado para cabeçalho, área de mensagens e campo de entrada.
+- **Componentes React Aprimorados:**
+  - Criação de componentes dedicados para elementos específicos como botão de cópia de código.
+  - Implementação de renderizadores personalizados para cada tipo de elemento markdown.
+  - Uso de referências para acesso direto a elementos DOM críticos como o contêiner de mensagens.
+  - Gerenciamento de estado otimizado para interações do usuário como cópia de código.
 
 ### Serviços Detalhados
 
@@ -150,3 +173,42 @@ A extensão segue uma arquitetura baseada em componentes do VS Code e serviços 
 - **`FileService.ts`**: Métodos assíncronos para interagir com `vscode.workspace.fs` (readFile, writeFile, stat, delete).
 - **`ConfigurationService.ts`**: Simplificado. Não gerencia mais diretamente as API Keys (lidas pelo `OpenAIService`). Pode ser usado para outras configurações via `globalState` se necessário.
 - **`SecurityService.ts`**: Simplificado. Não gerencia mais armazenamento seguro da API Key. Mantém `logAudit` (se útil).
+
+## 6. Implementação da Interface de Chat (WebView)
+
+A interface de chat foi implementada utilizando React e estilização CSS:
+
+- **Componentes Principais:**
+
+  - `ChatInterface`: Componente principal que renderiza toda a interface.
+  - `LoadingDots`: Componente para indicação visual de processamento.
+  - `CodeBlock`: Componente especializado para exibir blocos de código com realce de sintaxe e botão de cópia.
+  - `CopyButton`: Componente para copiar código para a área de transferência com feedback visual.
+
+- **Estrutura Visual:**
+
+  - Cabeçalho: Contém seletor de modelo e botão de limpar conversa.
+  - Área de mensagens: Exibe histórico de conversa com suporte a markdown.
+  - Campo de entrada: Textarea para digitar mensagens com botão de envio.
+
+- **Tecnologias e Bibliotecas:**
+
+  - `ReactMarkdown`: Para renderização de markdown nas respostas do assistente.
+  - `remark-gfm`: Plugin para suporte a recursos estendidos de markdown (tabelas, listas de tarefas).
+  - `rehype-raw`: Plugin para permitir HTML dentro do markdown.
+  - `PrismJS`: Para realce de sintaxe em blocos de código.
+
+- **Escolhas de Design:**
+
+  - Interface limpa e minimalista inspirada no GitHub Copilot.
+  - Adaptação automática ao tema atual do VS Code.
+  - Foco na legibilidade e usabilidade para desenvolvedores.
+  - Blocos de código com identificação de linguagem e botão de cópia.
+  - Ausência de fundos coloridos nas mensagens para maior limpeza visual.
+  - Uso de animações sutis para feedback durante interações.
+
+- **Desafios Superados:**
+  - Problemas de layout com mensagens aparecendo abaixo do campo de entrada (resolvido com uso adequado de flexbox e propriedade `order`).
+  - Falhas na renderização de markdown (resolvido com implementação correta de componentes personalizados).
+  - Integração com tema do VS Code (resolvido com uso de variáveis CSS nativas do VS Code).
+  - Identificação de linguagem em blocos de código (resolvido com expressões regulares e mapeamento de aliases).

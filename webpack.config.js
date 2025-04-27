@@ -15,7 +15,7 @@ module.exports = {
     vscode: 'commonjs vscode'
   },
   resolve: {
-    extensions: ['.ts', '.tsx', '.js', '.jsx'],
+    extensions: ['.ts', '.tsx', '.js', '.jsx', '.css'],
     fallback: {
       crypto: false
     }
@@ -33,9 +33,17 @@ module.exports = {
       },
       {
         test: /\.css$/,
-        use: ['style-loader', 'css-loader']
+        use: [
+          'style-loader',
+          {
+            loader: 'css-loader',
+            options: {
+              sourceMap: true
+            }
+          }
+        ]
       }
     ]
   },
-  devtool: 'nosources-source-map'
+  devtool: 'source-map'
 };

@@ -91,10 +91,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.onDidReceiveMessage(
       async message => {
+        console.log('Mensagem recebida do webview:', message);
+
         switch (message.command) {
+          case 'test':
+            console.log('Comando de teste recebido do webview!');
+            return;
+
           case 'sendMessage':
             try {
-              if (this._isProcessing) { return; }
+              console.log('Comando sendMessage recebido, texto:', message.text?.length, 'chars');
+              if (this._isProcessing) {
+                console.log('Ignorando mensagem, já está processando');
+                return;
+              }
+
+              if (!message.text?.trim()) {
+                console.log('Mensagem vazia, ignorando');
+                return;
+              }
 
               this.addMessage(message.text, 'user');
 
@@ -116,10 +131,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 throw new Error(errorMsg);
               }
 
+              console.log('Processando mensagem...');
               const response = await this._processMessage(message.text);
+              console.log('Resposta obtida:', response?.length, 'chars');
               this.addMessage(response, 'assistant');
 
             } catch (error) {
+              console.error('Erro ao processar mensagem:', error);
               const errorText = `Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
               this.addMessage(errorText, 'assistant');
               vscode.window.showErrorMessage(errorText);
@@ -374,432 +392,187 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private async _updateWebview() {
     if (this._view) {
-      const html = await this._getHtmlForWebview();
-      this._view.webview.html = html;
+      const webviewContent = this._getWebviewContent();
+      this._view.webview.html = webviewContent;
     }
   }
 
-  private async _getHtmlForWebview() {
-    const styleContent = `
-      :root {
-        --vscode-foreground: var(--vscode-editor-foreground);
-        --vscode-background: var(--vscode-editor-background);
-        --vscode-border: var(--vscode-panel-border);
-        --copilot-blue: #0078d4;
-        --message-bg-user: var(--vscode-editor-inactiveSelectionBackground);
-        --message-bg-assistant: var(--vscode-editorWidget-background);
-        --input-bg: var(--vscode-input-background);
-        --input-fg: var(--vscode-input-foreground);
-        --button-bg: var(--copilot-blue);
-        --button-fg: white;
-        --border-color: var(--vscode-panel-border);
-      }
+  private _getWebviewContent() {
+    console.log('Gerando conteúdo do webview');
 
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-        padding: 0;
-        margin: 0;
-        background-color: var(--vscode-background);
-        color: var(--vscode-foreground);
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-        overflow: hidden;
-      }
+    // Obter o URI do script com o caminho correto
+    const scriptUri = this._view!.webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'out', 'webview.js')
+    );
 
-      .chat-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 8px 12px;
-        border-bottom: 1px solid var(--border-color);
-      }
+    console.log('URI do script webview:', scriptUri.toString());
 
-      .model-selector {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
+    // Dados para passar ao webview
+    const webviewData = {
+      messages: this._messages || [],
+      isProcessing: this._isProcessing || false,
+      availableModels: this._availableModels || [],
+      selectedModel: this._selectedModel || 'gpt-4o',
+      hasApiKey: this._openAIService?.hasApiKey() || false
+    };
 
-      .model-selector select {
-        background-color: var(--input-bg);
-        color: var(--input-fg);
-        border: 1px solid var(--border-color);
-        border-radius: 4px;
-        padding: 4px 8px;
-      }
+    console.log('Passando dados para o webview:', {
+      messageCount: this._messages.length,
+      models: this._availableModels.length,
+      isProcessing: this._isProcessing
+    });
 
-      .chat-actions {
-        display: flex;
-        gap: 8px;
-      }
-
-      .icon-button {
-        background: none;
-        border: none;
-        color: var(--vscode-foreground);
-        cursor: pointer;
-        padding: 4px;
-        opacity: 0.7;
-      }
-
-      .icon-button:hover {
-        opacity: 1;
-      }
-
-      .chat-container {
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-      }
-
-      .messages-container {
-        flex: 1;
-        overflow-y: auto;
-        padding: 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      .message {
-        display: flex;
-        max-width: 100%;
-        word-wrap: break-word;
-      }
-
-      .message-content {
-        padding: 10px 14px;
-        border-radius: 6px;
-        line-height: 1.5;
-        white-space: pre-wrap;
-      }
-
-      .user-message {
-        justify-content: flex-end;
-      }
-
-      .user-message .message-content {
-        background-color: var(--message-bg-user);
-        border-top-right-radius: 2px;
-      }
-
-      .assistant-message {
-        justify-content: flex-start;
-      }
-
-      .assistant-message .message-content {
-        background-color: var(--message-bg-assistant);
-        border-top-left-radius: 2px;
-      }
-
-      .message-time {
-        font-size: 11px;
-        margin-top: 4px;
-        opacity: 0.6;
-        text-align: right;
-      }
-
-      .input-container {
-        display: flex;
-        padding: 12px;
-        border-top: 1px solid var(--border-color);
-        background-color: var(--vscode-background);
-      }
-
-      .input-textarea {
-        flex: 1;
-        padding: 10px 12px;
-        background-color: var(--input-bg);
-        color: var(--input-fg);
-        border: 1px solid var(--border-color);
-        border-radius: 4px;
-        resize: none;
-        min-height: 20px;
-        max-height: 120px;
-        font-family: inherit;
-        line-height: 1.5;
-      }
-
-      .input-textarea:focus {
-        outline: 1px solid var(--copilot-blue);
-      }
-
-      .send-button {
-        padding: 6px 12px;
-        margin-left: 8px;
-        background-color: var(--button-bg);
-        color: var(--button-fg);
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .send-button:hover {
-        opacity: 0.9;
-      }
-
-      .send-button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      .typing-indicator {
-        display: flex;
-        gap: 4px;
-        padding: 8px 12px;
-        align-items: center;
-      }
-
-      .typing-indicator span {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background-color: var(--vscode-foreground);
-        opacity: 0.5;
-        animation: typing 1s infinite ease-in-out;
-      }
-
-      .typing-indicator span:nth-child(1) {
-        animation-delay: 0s;
-      }
-
-      .typing-indicator span:nth-child(2) {
-        animation-delay: 0.3s;
-      }
-
-      .typing-indicator span:nth-child(3) {
-        animation-delay: 0.6s;
-      }
-
-      @keyframes typing {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-5px); }
-      }
-
-      .empty-state {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        gap: 16px;
-        opacity: 0.7;
-        padding: 16px;
-        text-align: center;
-      }
-
-      .empty-state h3 {
-        margin: 0;
-        margin-bottom: 8px;
-      }
-
-      .empty-state p {
-        margin: 0;
-        font-size: 14px;
-        line-height: 1.5;
-      }
-
-      .empty-state-actions {
-        margin-top: 16px;
-      }
-
-      .action-button {
-        background-color: var(--button-bg);
-        color: var(--button-fg);
-        border: none;
-        border-radius: 4px;
-        padding: 8px 16px;
-        cursor: pointer;
-        font-size: 14px;
-      }
-
-      .action-button:hover {
-        opacity: 0.9;
-      }
-    `;
-
-    const provider = vscode.workspace.getConfiguration('psCopilot').get<'openai' | 'azure'>('provider') || 'openai';
-    let isConfigOk = false;
-    if (provider === 'azure') {
-      const azureKey = vscode.workspace.getConfiguration('psCopilot.azure').get<string>('apiKey');
-      const azureEndpoint = vscode.workspace.getConfiguration('psCopilot.azure').get<string>('endpoint');
-      const azureDeployment = vscode.workspace.getConfiguration('psCopilot.azure').get<string>('deploymentName') || vscode.workspace.getConfiguration('psCopilot').get<string>('model');
-      isConfigOk = !!azureKey && !!azureEndpoint && !!azureDeployment;
-    } else {
-      const apiKey = vscode.workspace.getConfiguration('psCopilot').get<string>('apiKey');
-      isConfigOk = !!apiKey;
-    }
-
-    let messagesHtml = '';
-    if (this._messages.length === 0 && !isConfigOk) {
-      messagesHtml = `<div class="empty-state">... Para começar, configure as credenciais ${provider === 'azure' ? 'Azure' : 'OpenAI'} nas Configurações...</div>`;
-    } else if (this._messages.length === 0) {
-      messagesHtml = `<div class="empty-state">... Bem-vindo! Faça sua pergunta...</div>`;
-    } else {
-      for (const message of this._messages) {
-        const messageClass = message.sender === 'user' ? 'user-message' : 'assistant-message';
-        const time = message.timestamp.toLocaleTimeString();
-
-        messagesHtml += `
-          <div class="message ${messageClass}">
-            <div>
-              <div class="message-content">${this._escapeHtml(message.text)}</div>
-              <div class="message-time">${time}</div>
-            </div>
-          </div>
-        `;
-      }
-    }
-
-    if (this._isProcessing) {
-      messagesHtml += `
-        <div class="message assistant-message">
-          <div>
-            <div class="message-content">
-              <div class="typing-indicator">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    let modelOptionsHtml = '';
-    for (const model of this._availableModels) {
-      const selected = model === this._selectedModel ? 'selected' : '';
-      modelOptionsHtml += `<option value="${model}" ${selected}>${model}</option>`;
-    }
-
-    const scriptContent = `
-      const vscode = acquireVsCodeApi();
-
-      const messagesContainer = document.getElementById('messages');
-      const textarea = document.getElementById('messageInput');
-      const sendButton = document.getElementById('sendButton');
-      const modelSelector = document.getElementById('modelSelector');
-      const clearButton = document.getElementById('clearButton');
-
-      function adjustTextareaHeight() {
-        textarea.style.height = 'auto';
-        textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-      }
-
-      function scrollToBottom() {
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
-      }
-
-      scrollToBottom();
-      textarea.focus();
-
-      textarea.addEventListener('input', adjustTextareaHeight);
-
-      function sendMessage() {
-        const text = textarea.value.trim();
-
-        if (text) {
-          vscode.postMessage({
-            command: 'sendMessage',
-            text: text
-          });
-
-          textarea.value = '';
-          textarea.style.height = 'auto';
-          textarea.focus();
+    // Precisamos converter o objeto Date para string antes de serializar com JSON.stringify
+    let serializedData = '{}';
+    try {
+      serializedData = JSON.stringify(webviewData, (_key, value) => {
+        if (value instanceof Date) {
+          return value.toISOString();
         }
-      }
-
-      sendButton.addEventListener('click', sendMessage);
-
-      textarea.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          sendMessage();
-        }
+        return value;
       });
-
-      modelSelector.addEventListener('change', (e) => {
-        vscode.postMessage({
-          command: 'changeModel',
-          model: e.target.value
-        });
+      console.log('Dados serializados com sucesso, tamanho:', serializedData.length);
+    } catch (error) {
+      console.error('Erro ao serializar dados para webview:', error);
+      serializedData = JSON.stringify({
+        messages: [],
+        isProcessing: false,
+        availableModels: this._availableModels || [],
+        selectedModel: this._selectedModel || 'gpt-4o',
+        hasApiKey: false
       });
+    }
 
-      clearButton.addEventListener('click', () => {
-        vscode.postMessage({
-          command: 'clearChat'
-        });
-      });
-
-      scrollToBottom();
-    `;
-
-    return `<!DOCTYPE html>
+    const htmlContent = `<!DOCTYPE html>
       <html lang="pt-BR">
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src ${this._view!.webview.cspSource} https:; script-src ${this._view!.webview.cspSource} 'unsafe-inline' 'unsafe-eval'; style-src ${this._view!.webview.cspSource} 'unsafe-inline';">
           <title>PS Copilot Chat</title>
           <style>
-            ${styleContent}
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              margin: 0;
+              padding: 0;
+              height: 100vh;
+              overflow: hidden;
+            }
+            #root {
+              height: 100%;
+            }
+            .error-container {
+              padding: 20px;
+              color: #d32f2f;
+              background-color: #fdd;
+              border: 1px solid #d32f2f;
+              border-radius: 4px;
+              margin: 20px;
+              font-family: Arial, sans-serif;
+            }
+            .loading {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              height: 100%;
+              flex-direction: column;
+              color: #666;
+            }
+            .loading-spinner {
+              border: 4px solid rgba(0, 0, 0, 0.1);
+              width: 36px;
+              height: 36px;
+              border-radius: 50%;
+              border-left-color: #0078d4;
+              animation: spin 1s ease infinite;
+              margin-bottom: 16px;
+            }
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
           </style>
         </head>
         <body>
-          <div class="chat-container">
-            <div class="chat-header">
-              <div class="model-selector">
-                <span>Modelo:</span>
-                <select id="modelSelector">
-                  ${modelOptionsHtml}
-                </select>
-              </div>
-              <div class="chat-actions">
-                <button id="clearButton" class="icon-button" title="Limpar conversa">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M2 4H3H14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M5 4V2C5 1.73478 5.10536 1.48043 5.29289 1.29289C5.48043 1.10536 5.73478 1 6 1H10C10.2652 1 10.5196 1.10536 10.7071 1.29289C10.8946 1.48043 11 1.73478 11 2V4M13 4V14C13 14.2652 12.8946 14.5196 12.7071 14.7071C12.5196 14.8946 12.2652 15 12 15H4C3.73478 15 3.48043 14.8946 3.29289 14.7071C3.10536 14.5196 3 14.2652 3 14V4H13Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div class="messages-container" id="messages">
-              ${messagesHtml}
-            </div>
-            <div class="input-container">
-              <textarea
-                id="messageInput"
-                class="input-textarea"
-                placeholder="Digite sua mensagem..."
-                rows="1"
-              ></textarea>
-              <button id="sendButton" class="send-button">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M14.6668 1.33333L7.3335 8.66666" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path d="M14.6668 1.33333L10.0002 14.6667L7.3335 8.66666L1.3335 6L14.6668 1.33333Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
+          <div id="root">
+            <div class="loading">
+              <div class="loading-spinner"></div>
+              <div>Carregando interface do chat...</div>
             </div>
           </div>
-          <script>
-            ${scriptContent}
+
+          <!-- Elemento de fallback para os dados do webview -->
+          <script id="webview-data" type="application/json">
+            ${serializedData}
           </script>
+
+          <script>
+            console.log('Script inicializado no HTML do webview');
+            try {
+              // Garantir que webviewData esteja disponível globalmente
+              window.webviewData = ${serializedData};
+              console.log('Dados iniciais definidos com sucesso');
+
+              // Verificar campos obrigatórios e aplicar fallbacks se necessário
+              if (!window.webviewData || typeof window.webviewData !== 'object') {
+                console.warn('webviewData inválido, reinicializando');
+                window.webviewData = {};
+              }
+
+              if (!Array.isArray(window.webviewData.messages)) {
+                window.webviewData.messages = [];
+              }
+
+              if (typeof window.webviewData.isProcessing !== 'boolean') {
+                window.webviewData.isProcessing = false;
+              }
+
+              if (!Array.isArray(window.webviewData.availableModels)) {
+                window.webviewData.availableModels = ${JSON.stringify(this._availableModels)};
+              }
+
+              if (!window.webviewData.selectedModel) {
+                window.webviewData.selectedModel = '${this._selectedModel}';
+              }
+
+              if (typeof window.webviewData.hasApiKey !== 'boolean') {
+                window.webviewData.hasApiKey = ${this._openAIService?.hasApiKey() || false};
+              }
+
+              console.log('Webview dados disponíveis:', {
+                messageCount: window.webviewData.messages?.length || 0,
+                models: window.webviewData.availableModels?.length || 0
+              });
+            } catch (e) {
+              console.error('Erro ao inicializar dados do webview:', e);
+              document.getElementById('root').innerHTML = '<div class="error-container">Erro ao inicializar dados do chat. Por favor, recarregue. Detalhes: ' + (e.message || 'Erro desconhecido') + '</div>';
+            }
+
+            // Verificar se o script principal carregou
+            let scriptLoaded = false;
+            window.addEventListener('error', function(e) {
+              console.error('Erro detectado:', e);
+              if (e.target && e.target.tagName === 'SCRIPT') {
+                console.error('Erro ao carregar script:', e);
+                if (!scriptLoaded) {
+                  document.getElementById('root').innerHTML = '<div class="error-container">Erro ao carregar recursos necessários. Por favor, recarregue a extensão.<br>Detalhes: ' + e.message + '</div>';
+                }
+              }
+            }, true);
+
+            // Timeout para verificar se o script carregou
+            setTimeout(function() {
+              if (!scriptLoaded && document.querySelector('.loading')) {
+                console.error('Timeout - script não carregou em 5 segundos');
+                document.getElementById('root').innerHTML = '<div class="error-container">Tempo limite excedido ao carregar a interface. Por favor, recarregue a extensão.</div>';
+              }
+            }, 5000);
+          </script>
+          <script src="${scriptUri}" onerror="document.getElementById('root').innerHTML = '<div class=\\'error-container\\'>Erro ao carregar o script da interface. Por favor, recarregue a extensão.</div>';" onload="scriptLoaded = true;"></script>
         </body>
       </html>`;
-  }
 
-  private _escapeHtml(text: string): string {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
+    console.log('HTML gerado com sucesso');
+    return htmlContent;
   }
 }

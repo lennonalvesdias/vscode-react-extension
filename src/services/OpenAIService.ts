@@ -165,12 +165,27 @@ export class OpenAIService {
   /**
    * Realiza uma chamada genérica para chat.
    * @param userMessage A mensagem do usuário.
-   * @returns A resposta de texto da API.
+   * @returns A resposta de texto da API em formato Markdown.
    */
   async chat(userMessage: string): Promise<string> {
     console.log('OpenAIService: Chamando chat (via makeRequest)');
-    // Usar um prompt de sistema padrão para chat genérico
-    const systemPrompt = 'Você é um assistente de IA útil.';
+    // Usar um prompt de sistema que solicita respostas em Markdown bem formatado
+    const systemPrompt = `
+      Você é um assistente de IA útil.
+      Formate suas respostas sempre usando Markdown para melhor legibilidade:
+
+      - Use **negrito** para destacar informações importantes
+      - Use _itálico_ para ênfase
+      - Use \`código inline\` para comandos, variáveis ou pequenos trechos de código
+      - Use blocos de código com (\`\`\`) para exemplos mais longos de código, especificando a linguagem
+      - Use listas (- item) quando apropriado
+      - Use cabeçalhos (## Título) para organizar seções na resposta
+      - Use tabelas para dados tabulares quando relevante
+      - Use > para citações ou destacar informações importantes
+
+      Se fornecer exemplos de código, certifique-se de que estejam bem formatados, identados e sejam completos.
+      Suas respostas devem ser informativas, precisas e bem estruturadas.
+    `;
     return this.makeRequest(systemPrompt, userMessage);
   }
 
