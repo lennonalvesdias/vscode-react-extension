@@ -29,6 +29,13 @@ interface ChatMessage {
   id?: string;
 }
 
+// Interface para grupos de mensagens
+interface MessageGroup {
+  sender: 'user' | 'assistant';
+  messages: ChatMessage[];
+  timestamp: Date;
+}
+
 interface ChatInterfaceProps {
   messages: ChatMessage[];
   isProcessing: boolean;
@@ -111,6 +118,61 @@ const CodeBlock: React.FC<{ language: string, value: string }> = ({ language, va
   );
 };
 
+// Componente para renderizar o conteúdo de uma mensagem
+const MessageContent: React.FC<{ message: ChatMessage }> = ({ message }) => {
+  const isUser = message.sender === 'user';
+
+  return (
+    <div className={`message-content ${!isUser ? 'markdown-content' : ''}`}>
+      {isUser ? (
+        <div>{message.text}</div>
+      ) : (
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeRaw]}
+          components={{
+            // Renderização especial apenas para blocos de código
+            code: ({ node, inline, className, children, ...props }) => {
+              const match = /language-(\w+)/.exec(className || '');
+
+              if (inline) {
+                return (
+                  <code className="inline-code" {...props}>
+                    {children}
+                  </code>
+                );
+              }
+
+              const language = match ? match[1] : '';
+              const code = String(children).replace(/\n$/, '');
+
+              return <CodeBlock language={language} value={code} />;
+            },
+            // Outros componentes básicos para garantir formatação consistente
+            p: ({ children }) => <p>{children}</p>,
+            h1: ({ children }) => <h1>{children}</h1>,
+            h2: ({ children }) => <h2>{children}</h2>,
+            h3: ({ children }) => <h3>{children}</h3>,
+            ul: ({ children }) => <ul>{children}</ul>,
+            ol: ({ children }) => <ol>{children}</ol>,
+            li: ({ children }) => <li>{children}</li>,
+            blockquote: ({ children }) => <blockquote>{children}</blockquote>,
+            a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>,
+            strong: ({ children }) => <strong>{children}</strong>,
+            em: ({ children }) => <em>{children}</em>,
+            table: ({ children }) => <table>{children}</table>,
+            tr: ({ children }) => <tr>{children}</tr>,
+            th: ({ children }) => <th>{children}</th>,
+            td: ({ children }) => <td>{children}</td>
+          }}
+        >
+          {message.text}
+        </ReactMarkdown>
+      )}
+    </div>
+  );
+};
+
 // Declaração do tipo para a API do VS Code
 declare function acquireVsCodeApi(): {
   postMessage: (message: any) => void;
@@ -169,6 +231,44 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [input, setInput] = React.useState('');
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+
+  // Função para agrupar mensagens do mesmo remetente
+  const groupMessages = (messages: ChatMessage[]): MessageGroup[] => {
+    if (!messages.length) { return []; }
+
+    const groups: MessageGroup[] = [];
+    let currentGroup: MessageGroup | null = null;
+
+    messages.forEach(message => {
+      // Se não há grupo atual ou o remetente é diferente, criar novo grupo
+      if (!currentGroup || currentGroup.sender !== message.sender) {
+        if (currentGroup) {
+          groups.push(currentGroup);
+        }
+
+        currentGroup = {
+          sender: message.sender,
+          messages: [message],
+          timestamp: message.timestamp
+        };
+      } else {
+        // Adicionar mensagem ao grupo atual
+        currentGroup.messages.push(message);
+        // Atualizar timestamp do grupo para o mais recente
+        currentGroup.timestamp = message.timestamp;
+      }
+    });
+
+    // Adicionar o último grupo se existir
+    if (currentGroup) {
+      groups.push(currentGroup);
+    }
+
+    return groups;
+  };
+
+  // Agrupar mensagens
+  const messageGroups = groupMessages(messages);
 
   // Efeito para rolar para o final das mensagens
   React.useEffect(() => {
@@ -263,69 +363,29 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             )}
           </div>
         ) : (
-          // Renderizar mensagens como uma lista
+          // Renderizar grupos de mensagens
           <div className="messages-list">
-            {messages.map((message, index) => {
-              const isUser = message.sender === 'user';
-              const messageClass = isUser ? 'message-user' : 'message-assistant';
+            {messageGroups.map((group, groupIndex) => {
+              const isUser = group.sender === 'user';
+              const groupClass = isUser ? 'message-group-user' : 'message-group-assistant';
               const label = isUser ? 'Você' : 'Assistente';
 
               return (
-                <div key={message.id || index} className={`message ${messageClass}`}>
+                <div key={groupIndex} className={`message-group ${groupClass}`}>
                   <div className="message-header">
                     <span>{label}</span>
-                    {message.timestamp && (
+                    {group.timestamp && (
                       <span className="message-timestamp">
-                        {formatTime(new Date(message.timestamp))}
+                        {formatTime(new Date(group.timestamp))}
                       </span>
                     )}
                   </div>
-                  <div className={`message-content ${!isUser ? 'markdown-content' : ''}`}>
-                    {isUser ? (
-                      <div>{message.text}</div>
-                    ) : (
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeRaw]}
-                        components={{
-                          // Renderização especial apenas para blocos de código
-                          code: ({ node, inline, className, children, ...props }) => {
-                            const match = /language-(\w+)/.exec(className || '');
-
-                            if (inline) {
-                              return (
-                                <code className="inline-code" {...props}>
-                                  {children}
-                                </code>
-                              );
-                            }
-
-                            const language = match ? match[1] : '';
-                            const code = String(children).replace(/\n$/, '');
-
-                            return <CodeBlock language={language} value={code} />;
-                          },
-                          // Outros componentes básicos para garantir formatação consistente
-                          p: ({ children }) => <p>{children}</p>,
-                          h1: ({ children }) => <h1>{children}</h1>,
-                          h2: ({ children }) => <h2>{children}</h2>,
-                          h3: ({ children }) => <h3>{children}</h3>,
-                          ul: ({ children }) => <ul>{children}</ul>,
-                          ol: ({ children }) => <ol>{children}</ol>,
-                          li: ({ children }) => <li>{children}</li>,
-                          blockquote: ({ children }) => <blockquote>{children}</blockquote>,
-                          a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>,
-                          strong: ({ children }) => <strong>{children}</strong>,
-                          em: ({ children }) => <em>{children}</em>,
-                          table: ({ children }) => <table>{children}</table>,
-                          tr: ({ children }) => <tr>{children}</tr>,
-                          th: ({ children }) => <th>{children}</th>,
-                          td: ({ children }) => <td>{children}</td>
-                        }}
-                      >
-                        {message.text}
-                      </ReactMarkdown>
-                    )}
+                  <div className="message-bubbles">
+                    {group.messages.map((message, messageIndex) => (
+                      <div key={message.id || `${groupIndex}-${messageIndex}`} className="message-bubble">
+                        <MessageContent message={message} />
+                      </div>
+                    ))}
                   </div>
                 </div>
               );
@@ -335,12 +395,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
         {/* Indicador de digitação */}
         {isProcessing && (
-          <div className="message message-assistant">
+          <div className="message-group message-group-assistant">
             <div className="message-header">
               <span>Assistente</span>
             </div>
-            <div className="message-content loading-animation">
-              <LoadingDots size="medium" color="currentColor" />
+            <div className="message-bubbles">
+              <div className="message-bubble">
+                <div className="message-content loading-animation">
+                  <LoadingDots size="medium" color="currentColor" />
+                </div>
+              </div>
             </div>
           </div>
         )}
