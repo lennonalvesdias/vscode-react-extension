@@ -2,6 +2,9 @@ import * as vscode from 'vscode';
 import OpenAI from 'openai';
 import { getCompleteSomaGuidelines } from '../shared/SomaGuidelines';
 
+// Importar os tipos específicos da OpenAI
+import { ChatCompletionMessageParam } from 'openai/resources';
+
 export class OpenAIService {
   private openai: OpenAI | null = null;
 
@@ -170,9 +173,10 @@ export class OpenAIService {
   /**
    * Realiza uma chamada genérica para chat.
    * @param userMessage A mensagem do usuário.
+   * @param chatHistory Histórico opcional de mensagens anteriores.
    * @returns A resposta de texto da API em formato Markdown.
    */
-  async chat(userMessage: string): Promise<string> {
+  async chat(userMessage: string, chatHistory: ChatCompletionMessageParam[] = []): Promise<string> {
     console.log('OpenAIService: Chamando chat (via makeRequest)');
 
     // Incluir diretrizes do Soma no prompt de sistema para garantir que as respostas respeitam o Soma
@@ -199,7 +203,59 @@ export class OpenAIService {
 
       ${somaGuidelines}
     `;
-    return this.makeRequest(systemPrompt, userMessage);
+
+    this.validateProviderConfiguration();
+    if (!this.openai) { throw new Error('OpenAI client not available'); }
+
+    console.log('--- OpenAI Request ---');
+    console.log('Model:', this.model);
+    console.log('System Prompt (preview):', systemPrompt.substring(0, 100) + '...');
+    console.log('User Content (preview):', userMessage.substring(0, 100) + '...');
+    console.log('Chat History Length:', chatHistory.length);
+    console.log('---------------------');
+
+    try {
+      const start = Date.now();
+
+      // Preparar as mensagens incluindo histórico e a mensagem atual
+      const messages: ChatCompletionMessageParam[] = [
+        { role: 'system', content: systemPrompt }
+      ];
+
+      // Adicionar histórico de mensagens, se existir
+      if (chatHistory.length > 0) {
+        messages.push(...chatHistory);
+      }
+
+      // Adicionar a mensagem atual do usuário
+      messages.push({ role: 'user', content: userMessage });
+
+      const completion = await this.openai.chat.completions.create({
+        model: this.model,
+        temperature: this.temperature,
+        max_tokens: this.maxTokens,
+        messages: messages,
+      });
+
+      const duration = Date.now() - start;
+      console.log(`OpenAI request took ${duration}ms`);
+
+      const result = completion.choices[0]?.message?.content;
+      if (!result) {
+        throw new Error('Resposta inesperada da API OpenAI.');
+      }
+      console.log('--- OpenAI Response (preview) ---');
+      console.log(result.substring(0, 200) + '...');
+      console.log('---------------------');
+      return result;
+    } catch (error: any) {
+      console.error('Erro na chamada da API OpenAI:', error);
+      if (error.response) {
+        console.error('API Error Status:', error.response.status);
+        console.error('API Error Data:', error.response.data);
+      }
+      throw new Error(`Erro ao comunicar com a API OpenAI: ${error.message}`);
+    }
   }
 
   /**

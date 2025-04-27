@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { OpenAIService } from '../services/OpenAIService';
 import { CodeGenerationService } from '../services/CodeGenerationService';
+import { ChatCompletionMessageParam } from 'openai/resources';
 
 interface ChatMessage {
   text: string;
@@ -207,25 +208,46 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           // Verificar se é um erro indicando que não é uma solicitação de geração
           if (result.error.includes("não parece ser uma solicitação de geração de código")) {
             // É uma mensagem de conversa normal, usar chat
-            return await this._openAIService.chat(text);
+            // Converter o histórico de mensagens para o formato esperado pela API
+            const chatHistory = this._convertMessagesToApiFormat();
+            return await this._openAIService.chat(text, chatHistory);
           } else {
             // Adicionar feedback sobre o erro antes de continuar com chat
             this.addMessage(`❌ ${result.error}`, 'assistant');
-            return await this._openAIService.chat(text);
+            // Converter o histórico de mensagens para o formato esperado pela API
+            const chatHistory = this._convertMessagesToApiFormat();
+            return await this._openAIService.chat(text, chatHistory);
           }
         }
 
         // Fallback para chat padrão se algo inesperado acontecer
-        return await this._openAIService.chat(text);
+        const chatHistory = this._convertMessagesToApiFormat();
+        return await this._openAIService.chat(text, chatHistory);
       } catch (error) {
         // Erro no processamento, usar chat como fallback
         console.warn('Erro ao processar intenção, usando chat como fallback:', error);
-        return await this._openAIService.chat(text);
+        const chatHistory = this._convertMessagesToApiFormat();
+        return await this._openAIService.chat(text, chatHistory);
       }
     } catch (error) {
       console.error('Erro ao processar mensagem:', error);
       throw error;
     }
+  }
+
+  /**
+   * Converte as mensagens armazenadas no formato interno para o formato esperado pela API da OpenAI
+   * Excluindo a mensagem mais recente (do usuário) que será adicionada separadamente
+   */
+  private _convertMessagesToApiFormat(): ChatCompletionMessageParam[] {
+    // Pegar todas as mensagens exceto a última (que é a mensagem atual do usuário)
+    // Limite a 10 mensagens anteriores para evitar tokens excessivos
+    const messagesToInclude = this._messages.slice(0, -1).slice(-10);
+
+    return messagesToInclude.map(msg => ({
+      role: (msg.sender === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: msg.text
+    }));
   }
 
   private async _updateWebview() {
