@@ -51,6 +51,76 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
+  /**
+   * Obtém o código selecionado pelo usuário ou o conteúdo do arquivo atual
+   * @returns Um objeto contendo o contexto e informações sobre a sua origem
+   */
+  private async getCodeContext(): Promise<{ code: string, source: string, language: string } | null> {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      console.log('Nenhum editor ativo encontrado');
+      return null;
+    }
+
+    // Verificar se há texto selecionado
+    const selection = editor.selection;
+    const document = editor.document;
+    const fileName = document.fileName.split(/[\\/]/).pop() || 'desconhecido';
+    const language = document.languageId;
+
+    if (!selection.isEmpty) {
+      // Se houver seleção, usa o texto selecionado como contexto
+      const selectedText = document.getText(selection);
+      if (selectedText.trim().length > 0) {
+        console.log(`Contexto obtido: ${selectedText.length} caracteres de código selecionado`);
+        return {
+          code: selectedText,
+          source: `Seleção em ${fileName}`,
+          language
+        };
+      }
+    }
+
+    // Se não houver seleção ou a seleção estiver vazia, usa o conteúdo do arquivo
+    const fileContent = document.getText();
+    if (fileContent.trim().length > 0) {
+      // Aplicar truncamento inteligente para arquivos grandes (limite de 10K caracteres)
+      let truncatedContent = fileContent;
+      const maxLength = 10000;
+
+      if (fileContent.length > maxLength) {
+        console.log(`Arquivo grande (${fileContent.length} chars), aplicando truncamento`);
+
+        // Tentar identificar a posição do cursor
+        const cursorPosition = editor.selection.active;
+        const cursorOffset = document.offsetAt(cursorPosition);
+
+        // Extrair a região ao redor do cursor
+        const regionStart = Math.max(0, cursorOffset - maxLength / 2);
+        const regionEnd = Math.min(fileContent.length, cursorOffset + maxLength / 2);
+
+        truncatedContent = fileContent.substring(regionStart, regionEnd);
+
+        // Adicionar indicadores de truncamento
+        if (regionStart > 0) {
+          truncatedContent = `/* ... início do arquivo truncado ... */\n${truncatedContent}`;
+        }
+        if (regionEnd < fileContent.length) {
+          truncatedContent = `${truncatedContent}\n/* ... restante do arquivo truncado ... */`;
+        }
+      }
+
+      console.log(`Contexto obtido: ${truncatedContent.length} caracteres do arquivo ${fileName}`);
+      return {
+        code: truncatedContent,
+        source: `Arquivo ${fileName}`,
+        language
+      };
+    }
+
+    return null;
+  }
+
   private async showWelcomeOrStatusMessage() {
     if (!this._openAIService || !this._openAIService.hasApiKey()) {
       const provider = vscode.workspace.getConfiguration('psCopilot').get<'openai' | 'azure'>('provider') || 'openai';
@@ -167,6 +237,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       throw new Error("Serviços de IA não inicializados.");
     }
     try {
+      // Obter o contexto do código atual (seleção ou arquivo)
+      const codeContext = await this.getCodeContext();
+
+      // Modificar a mensagem do usuário para incluir o contexto, se disponível
+      let messageWithContext = text;
+      if (codeContext) {
+        messageWithContext = `
+${text}
+
+===== CONTEXTO DO CÓDIGO (${codeContext.source}, linguagem: ${codeContext.language}) =====
+\`\`\`${codeContext.language}
+${codeContext.code}
+\`\`\`
+`;
+        console.log(`Contexto adicionado à mensagem: ${codeContext.source} (${codeContext.code.length} caracteres)`);
+      }
+
       // Usar processCodeGenerationRequest para determinar a intenção do usuário
       console.log('Processando mensagem do usuário...');
 
@@ -177,7 +264,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this.addMessage(status, 'assistant');
         };
 
-        const result = await this._codeGenerationService.processCodeGenerationRequest(text, statusCallback);
+        const result = await this._codeGenerationService.processCodeGenerationRequest(messageWithContext, statusCallback);
 
         // Se for uma intenção de geração de código bem-sucedida
         if (result.success && result.result) {
@@ -210,24 +297,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             // É uma mensagem de conversa normal, usar chat
             // Converter o histórico de mensagens para o formato esperado pela API
             const chatHistory = this._convertMessagesToApiFormat();
-            return await this._openAIService.chat(text, chatHistory);
+            return await this._openAIService.chat(messageWithContext, chatHistory);
           } else {
             // Adicionar feedback sobre o erro antes de continuar com chat
             this.addMessage(`❌ ${result.error}`, 'assistant');
             // Converter o histórico de mensagens para o formato esperado pela API
             const chatHistory = this._convertMessagesToApiFormat();
-            return await this._openAIService.chat(text, chatHistory);
+            return await this._openAIService.chat(messageWithContext, chatHistory);
           }
         }
 
         // Fallback para chat padrão se algo inesperado acontecer
         const chatHistory = this._convertMessagesToApiFormat();
-        return await this._openAIService.chat(text, chatHistory);
+        return await this._openAIService.chat(messageWithContext, chatHistory);
       } catch (error) {
         // Erro no processamento, usar chat como fallback
         console.warn('Erro ao processar intenção, usando chat como fallback:', error);
         const chatHistory = this._convertMessagesToApiFormat();
-        return await this._openAIService.chat(text, chatHistory);
+        return await this._openAIService.chat(messageWithContext, chatHistory);
       }
     } catch (error) {
       console.error('Erro ao processar mensagem:', error);
