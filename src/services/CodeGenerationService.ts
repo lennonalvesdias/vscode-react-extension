@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
 import { OpenAIService } from './OpenAIService';
 import { FileService } from './FileService';
-import { DeveloperAgent } from '../agents/DeveloperAgent';
+import { FrontendDeveloperAgent } from '../agents/FrontendDeveloperAgent';
 import { TestAgent } from '../agents/TestAgent';
-import { DesignAgent } from '../agents/DesignAgent';
-import { PromptClassifierAgent } from '../agents/PromptClassifierAgent';
+import { ArchitectureAgent } from '../agents/ArchitectureAgent';
+import { PromptClassifierAgent, IntentAnalysisResult } from '../agents/PromptClassifierAgent';
 
 /**
  * Interface para representar uma solicitação de geração de componente React
@@ -36,17 +36,17 @@ export interface GeneratedFile {
 export class CodeGenerationService {
   private openAIService: OpenAIService;
   private fileService: FileService;
-  private developerAgent: DeveloperAgent;
+  private frontendDeveloperAgent: FrontendDeveloperAgent;
   private testAgent: TestAgent;
-  private designAgent: DesignAgent;
+  private architectureAgent: ArchitectureAgent;
   private promptClassifierAgent: PromptClassifierAgent;
 
   constructor() {
     this.openAIService = new OpenAIService();
     this.fileService = new FileService();
-    this.developerAgent = new DeveloperAgent(this.openAIService);
+    this.frontendDeveloperAgent = new FrontendDeveloperAgent(this.openAIService);
     this.testAgent = new TestAgent(this.openAIService);
-    this.designAgent = new DesignAgent(this.openAIService);
+    this.architectureAgent = new ArchitectureAgent(this.openAIService);
     this.promptClassifierAgent = new PromptClassifierAgent(this.openAIService);
   }
 
@@ -73,33 +73,33 @@ export class CodeGenerationService {
       request.path = this.getDefaultPath(request.type, request.name);
     }
 
-    // Etapa 1: Gerar código principal
+    // Etapa 1: Criar plano de desenvolvimento pelo ArchitectureAgent
+    console.log("Fase 1: Criando plano de desenvolvimento com ArchitectureAgent...");
+    const developmentPlan = await this.architectureAgent.createDevelopmentPlan(request);
+
+    // Etapa 2: Gerar código principal baseado no plano do arquiteto
+    console.log("Fase 2: Gerando código principal com FrontendDeveloperAgent baseado no plano...");
     let mainCode: string;
     try {
-      mainCode = await this.developerAgent.generateMainCode(request);
+      mainCode = await this.frontendDeveloperAgent.generateMainCode(request, developmentPlan);
     } catch (error) {
       console.error("Erro fatal ao gerar código principal:", error);
       vscode.window.showErrorMessage(`Erro ao gerar código principal: ${error instanceof Error ? error.message : error}`);
       throw error; // Interrompe o fluxo
     }
 
-    // Etapa 2 e 3: Gerar testes e análise de design (paralelo)
+    // Etapa 3: Gerar testes (pode ser em paralelo)
+    console.log("Fase 3: Gerando testes com TestAgent...");
     const testPromise = this.testAgent.generateTests(mainCode, request.description)
       .catch(error => {
         console.error("Erro ao gerar testes (não fatal):", error);
         return "// Falha ao gerar testes automaticamente."; // Placeholder
       });
 
-    const designAnalysisPromise = this.designAgent.analyzeDesign(mainCode, request.description)
-      .catch(error => {
-        console.error("Erro ao analisar design (não fatal):", error);
-        return "/* Falha na análise de design. */"; // Placeholder
-      });
-
-    const [testCode, designAnalysis] = await Promise.all([testPromise, designAnalysisPromise]);
+    const [testCode] = await Promise.all([testPromise]);
 
     // Etapa 4: Extrair/montar arquivos
-    const files = this.extractFiles(mainCode, testCode, designAnalysis, request);
+    const files = this.extractFiles(mainCode, testCode, developmentPlan, request);
 
     // Etapa 5: Criar/atualizar arquivos no workspace
     const createdFiles: GeneratedFile[] = [];
@@ -128,20 +128,26 @@ export class CodeGenerationService {
    * Monta a estrutura de arquivos finais com base nos resultados dos agentes.
    * @param mainCode Código principal gerado
    * @param testCode Código de teste gerado
-   * @param designAnalysis Análise de design gerada
+   * @param developmentPlan Plano de desenvolvimento criado pelo arquiteto
    * @param request Detalhes da solicitação original
    */
   private extractFiles(
     mainCode: string,
     testCode: string,
-    designAnalysis: string,
+    developmentPlan: string,
     request: ComponentGenerationRequest
   ): GeneratedFile[] {
     const files: GeneratedFile[] = [];
     const { type, path: basePath = '', name } = request;
     const componentName = name.charAt(0).toUpperCase() + name.slice(1);
 
-    const mainCodeWithAnalysis = `/*\nAnálise de Design e Acessibilidade:\n${designAnalysis}\n*/\n\n${mainCode}`;
+    // Adicionar comentário com o plano de desenvolvimento no início do código principal
+    const mainCodeWithPlan = `/*
+# Plano de Desenvolvimento
+${developmentPlan}
+*/
+
+${mainCode}`;
 
     switch (type) {
       case 'component': {
@@ -150,7 +156,7 @@ export class CodeGenerationService {
         const indexFilePath = `${basePath}/index.tsx`;
         const cssFilePath = `${basePath}/${componentName}.module.css`;
 
-        files.push({ path: mainFilePath, content: mainCodeWithAnalysis });
+        files.push({ path: mainFilePath, content: mainCodeWithPlan });
         files.push({ path: testFilePath, content: testCode || this.generateBasicTest(componentName, type) });
         files.push({ path: indexFilePath, content: `export { default } from './${componentName}';\n` });
         files.push({ path: cssFilePath, content: `/* Estilos para ${componentName} */\n` });
@@ -160,9 +166,8 @@ export class CodeGenerationService {
         const hookFileName = `use${componentName}`;
         const mainFilePath = `${basePath}/${hookFileName}.ts`;
         const testFilePath = `${basePath}/${hookFileName}.test.ts`;
-        const hookCodeWithAnalysis = `/*\nAnálise:\n${designAnalysis}\n*/\n\n${mainCode}`;
 
-        files.push({ path: mainFilePath, content: hookCodeWithAnalysis });
+        files.push({ path: mainFilePath, content: mainCodeWithPlan });
         files.push({ path: testFilePath, content: testCode || this.generateBasicTest(hookFileName, type) });
         break;
       }
@@ -170,9 +175,8 @@ export class CodeGenerationService {
         const serviceFileName = `${componentName}Service`;
         const mainFilePath = `${basePath}/${serviceFileName}.ts`;
         const testFilePath = `${basePath}/${serviceFileName}.test.ts`;
-        const serviceCodeWithAnalysis = `/*\nAnálise:\n${designAnalysis}\n*/\n\n${mainCode}`;
 
-        files.push({ path: mainFilePath, content: serviceCodeWithAnalysis });
+        files.push({ path: mainFilePath, content: mainCodeWithPlan });
         files.push({ path: testFilePath, content: testCode || this.generateBasicTest(serviceFileName, type) });
         break;
       }
@@ -183,7 +187,7 @@ export class CodeGenerationService {
         const indexFilePath = `${basePath}/index.tsx`;
         const cssFilePath = `${basePath}/${pageFileName}.module.css`;
 
-        files.push({ path: mainFilePath, content: mainCodeWithAnalysis });
+        files.push({ path: mainFilePath, content: mainCodeWithPlan });
         files.push({ path: testFilePath, content: testCode || this.generateBasicTest(pageFileName, type) });
         files.push({ path: indexFilePath, content: `export { default } from './${pageFileName}';\n` });
         files.push({ path: cssFilePath, content: `/* Estilos para ${pageFileName} */\n` });
@@ -251,11 +255,360 @@ import ${hookName} from './${hookName}';\n\ndescribe('${hookName}', () => {\n  i
   }
 
   /**
-   * Analisa a intenção da mensagem do usuário
-   * @param message Mensagem do usuário
-   * @returns Resultado da análise
+   * Analisa o conteúdo da mensagem do usuário para determinar se é uma solicitação
+   * de geração de código ou uma conversa normal
+   * @param message A mensagem do usuário para analisar
+   * @returns O resultado da análise
    */
-  public async analyzeUserIntent(message: string) {
-    return this.promptClassifierAgent.analyzeUserIntent(message);
+  public async analyzeUserRequest(message: string): Promise<IntentAnalysisResult> {
+    return await this.promptClassifierAgent.analyzeUserIntent(message);
+  }
+
+  /**
+   * Processa um pedido de geração de código baseado na mensagem do usuário
+   * @param message A mensagem do usuário com a solicitação de geração
+   * @param statusCallback Função de callback opcional para feedback durante o processo
+   * @returns Um objeto com o resultado do processamento
+   */
+  public async processCodeGenerationRequest(
+    message: string,
+    statusCallback?: (status: string) => void
+  ): Promise<{
+    success: boolean;
+    result?: GeneratedFile[];
+    error?: string;
+  }> {
+    try {
+      // Analisar a intenção do usuário
+      statusCallback?.('Analisando intenção do seu pedido...');
+      const intentResult = await this.analyzeUserRequest(message);
+
+      // Verificar se é uma solicitação de geração de código para frontend
+      if (!intentResult.isCodeGeneration) {
+        return {
+          success: false,
+          error: "A mensagem não parece ser uma solicitação de geração de código."
+        };
+      }
+
+      statusCallback?.('✅ Identificada intenção de gerar código!');
+
+      if (!intentResult.isFrontendDevelopment) {
+        return {
+          success: false,
+          error: "Este assistente é especializado em desenvolvimento frontend. Sua solicitação parece ser para outro tipo de desenvolvimento."
+        };
+      }
+
+      // Extrair informações do componente a partir da mensagem
+      statusCallback?.('Identificando detalhes do artefato a ser gerado...');
+      const artifactInfo = this.extractArtifactInfoFromMessage(message);
+
+      if (!artifactInfo) {
+        return {
+          success: false,
+          error: "Não foi possível identificar detalhes suficientes sobre o componente a ser gerado."
+        };
+      }
+
+      statusCallback?.(`✅ Vou gerar um ${artifactInfo.type} chamado "${artifactInfo.name}"`);
+
+      // Passo 1: Criar plano de arquitetura
+      statusCallback?.('🏗️ O arquiteto está planejando a estrutura do código...');
+      const developmentPlan = await this.architectureAgent.createDevelopmentPlan({
+        name: artifactInfo.name,
+        type: artifactInfo.type,
+        description: artifactInfo.description,
+        path: artifactInfo.path
+      });
+
+      statusCallback?.('✅ Plano de arquitetura concluído!');
+
+      // Passo 2: Desenvolver o código baseado no plano
+      statusCallback?.('👨‍💻 O desenvolvedor está implementando o código seguindo o plano...');
+      const generatedCode = await this.frontendDeveloperAgent.generateMainCode({
+        name: artifactInfo.name,
+        type: artifactInfo.type,
+        description: artifactInfo.description,
+        path: artifactInfo.path
+      }, developmentPlan);
+
+      statusCallback?.('✅ Implementação do código concluída!');
+
+      // Passo 3: Gerar testes (opcional, em paralelo)
+      statusCallback?.('🧪 Gerando testes automatizados...');
+      const testCode = await this.testAgent.generateTests(generatedCode, artifactInfo.description)
+        .catch(error => {
+          console.warn('Erro ao gerar testes (não crítico):', error);
+          statusCallback?.('⚠️ Não foi possível gerar testes automatizados.');
+          return "// Falha ao gerar testes automaticamente.";
+        });
+
+      statusCallback?.('✅ Testes concluídos!');
+
+      // Passo 4: Montar estrutura de arquivos sem incluir o plano no código gerado
+      statusCallback?.('📁 Organizando a estrutura de arquivos...');
+
+      // Preparar arquivos sem incluir o plano no código final
+      const files: GeneratedFile[] = [];
+      const { type, path: basePath = '', name } = artifactInfo;
+      const componentName = name.charAt(0).toUpperCase() + name.slice(1);
+
+      switch (type) {
+        case 'component': {
+          const mainFilePath = `${basePath}/${componentName}.tsx`;
+          const testFilePath = `${basePath}/${componentName}.test.tsx`;
+          const indexFilePath = `${basePath}/index.tsx`;
+          const cssFilePath = `${basePath}/${componentName}.module.css`;
+
+          files.push({ path: mainFilePath, content: generatedCode });
+          files.push({ path: testFilePath, content: testCode });
+          files.push({ path: indexFilePath, content: `export { default } from './${componentName}';\n` });
+          files.push({ path: cssFilePath, content: `/* Estilos para ${componentName} */\n` });
+          break;
+        }
+        case 'hook': {
+          const hookFileName = `use${componentName}`;
+          const mainFilePath = `${basePath}/${hookFileName}.ts`;
+          const testFilePath = `${basePath}/${hookFileName}.test.ts`;
+
+          files.push({ path: mainFilePath, content: generatedCode });
+          files.push({ path: testFilePath, content: testCode });
+          break;
+        }
+        case 'service': {
+          const serviceFileName = `${componentName}Service`;
+          const mainFilePath = `${basePath}/${serviceFileName}.ts`;
+          const testFilePath = `${basePath}/${serviceFileName}.test.ts`;
+
+          files.push({ path: mainFilePath, content: generatedCode });
+          files.push({ path: testFilePath, content: testCode });
+          break;
+        }
+        case 'page': {
+          const pageFileName = `${componentName}Page`;
+          const mainFilePath = `${basePath}/${pageFileName}.tsx`;
+          const testFilePath = `${basePath}/${pageFileName}.test.tsx`;
+          const indexFilePath = `${basePath}/index.tsx`;
+          const cssFilePath = `${basePath}/${pageFileName}.module.css`;
+
+          files.push({ path: mainFilePath, content: generatedCode });
+          files.push({ path: testFilePath, content: testCode });
+          files.push({ path: indexFilePath, content: `export { default } from './${pageFileName}';\n` });
+          files.push({ path: cssFilePath, content: `/* Estilos para ${pageFileName} */\n` });
+          break;
+        }
+      }
+
+      // Normalizar caminhos
+      const normalizedFiles = files.map(file => ({
+        ...file,
+        path: file.path.replace(/^\.\//, '')
+      }));
+
+      // Passo 5: Criar arquivos no sistema de arquivos
+      statusCallback?.('💾 Salvando os arquivos...');
+      for (const file of normalizedFiles) {
+        const exists = await this.fileService.fileExists(file.path);
+        if (exists) {
+          statusCallback?.(`⚠️ Arquivo ${file.path} já existe.`);
+          // Permitir sobrescrever em caso de arquivo existente
+          await this.fileService.updateFile(file.path, file.content);
+        } else {
+          await this.fileService.createFile(file.path, file.content);
+        }
+      }
+
+      statusCallback?.('✅ Todos os arquivos foram criados com sucesso!');
+
+      return {
+        success: true,
+        result: normalizedFiles
+      };
+    } catch (error) {
+      console.error("Erro ao processar pedido de geração de código:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Ocorreu um erro ao processar o pedido de geração de código."
+      };
+    }
+  }
+
+  /**
+   * Extrai informações sobre o artefato a ser gerado a partir da mensagem do usuário
+   * @param message A mensagem do usuário
+   * @returns Informações do artefato ou null se não for possível extrair
+   */
+  private extractArtifactInfoFromMessage(message: string): {
+    name: string;
+    type: 'component' | 'hook' | 'service' | 'page';
+    description: string;
+    path?: string;
+  } | null {
+    try {
+      // Normalização básica da mensagem para análise
+      const lowerMessage = message.toLowerCase().trim();
+
+      // Identificar tipo de artefato (component, hook, service, page)
+      let type: 'component' | 'hook' | 'service' | 'page' = 'component'; // Padrão é componente
+
+      // Termos em português e inglês que indicam uma página/tela
+      const pageTerms = ['página', 'page', 'tela', 'screen', 'view', 'interface'];
+      const hookTerms = ['hook', 'usestate', 'usereducer', 'useeffect', 'usecontext'];
+      const serviceTerms = ['serviço', 'service', 'api', 'client', 'http', 'request'];
+
+      // Verificar por termos específicos que indicam o tipo
+      for (const term of pageTerms) {
+        if (lowerMessage.includes(term)) {
+          type = 'page';
+          break;
+        }
+      }
+
+      // Se não for página, verificar outros tipos
+      if (type !== 'page') {
+        // Verificar se é hook
+        for (const term of hookTerms) {
+          if (lowerMessage.includes(term)) {
+            type = 'hook';
+            break;
+          }
+        }
+
+        // Verificar se é serviço
+        if (type !== 'hook') {
+          for (const term of serviceTerms) {
+            if (lowerMessage.includes(term)) {
+              type = 'service';
+              break;
+            }
+          }
+        }
+      }
+
+      // Tentar extrair um nome do artefato da mensagem
+      let name = '';
+
+      // Mapeamento de funcionalidades comuns para nomes padronizados
+      const commonFeatureMap: Record<string, string> = {
+        'login': 'Login',
+        'cadastro': 'Register',
+        'registro': 'Register',
+        'autenticação': 'Authentication',
+        'autenticacao': 'Authentication',
+        'auth': 'Auth',
+        'perfil': 'Profile',
+        'usuário': 'User',
+        'usuario': 'User',
+        'dashboard': 'Dashboard',
+        'painel': 'Dashboard',
+        'produto': 'Product',
+        'produtos': 'Product',
+        'checkout': 'Checkout',
+        'pagamento': 'Payment',
+        'carrinho': 'Cart',
+        'busca': 'Search',
+        'pesquisa': 'Search',
+        'configuração': 'Settings',
+        'configuracoes': 'Settings',
+        'home': 'Home',
+        'inicial': 'Home',
+        'contato': 'Contact',
+        'sobre': 'About'
+      };
+
+      // Verificar por padrões comuns para funcionalidades
+      for (const [feature, mappedName] of Object.entries(commonFeatureMap)) {
+        if (lowerMessage.includes(feature)) {
+          name = mappedName;
+          break;
+        }
+      }
+
+      // Se não encontrou nas funcionalidades comuns, tentar padrões mais específicos
+      if (!name) {
+        // Padrões comuns para identificar nomes em solicitações
+        const patterns = [
+          // PT-BR patterns
+          /(?:criar|gerar|desenvolver|implementar|fazer)\s+(?:um|uma)?\s+(?:componente|página|tela|hook|serviço)\s+(?:de|do|da|para)?\s+(['"]?)([a-zA-Z0-9]+)\1/i,
+          /(?:criar|gerar|desenvolver|implementar|fazer)\s+(?:o|a|um|uma)?\s+(['"]?)([a-zA-Z0-9]+)\1\s+(?:componente|página|tela|hook|serviço)/i,
+          /(?:página|pagina|tela|screen|view|componente|hook|serviço)\s+(?:de|do|da|para)?\s+(['"]?)([a-zA-Z0-9]+)\1/i,
+
+          // EN patterns
+          /(?:create|generate|develop|implement)\s+(?:a|an)?\s+(?:component|page|screen|hook|service)\s+(?:for|of)?\s+(['"]?)([a-zA-Z0-9]+)\1/i,
+          /(?:create|generate|develop|implement)\s+(?:a|an)?\s+(['"]?)([a-zA-Z0-9]+)\1\s+(?:component|page|screen|hook|service)/i,
+          /(?:page|screen|view|component|hook|service)\s+(?:for|of)?\s+(['"]?)([a-zA-Z0-9]+)\1/i
+        ];
+
+        for (const pattern of patterns) {
+          const match = message.match(pattern);
+          if (match && (match[2])) {
+            name = match[2];
+            name = name.charAt(0).toUpperCase() + name.slice(1);
+            break;
+          }
+        }
+      }
+
+      // Se ainda não encontrou nome, verificar palavras-chave diretas na mensagem
+      if (!name) {
+        const words = lowerMessage.split(/\s+/);
+        for (const word of words) {
+          const cleanWord = word.replace(/[^\w]/g, '');
+          if (cleanWord.length > 2 && !['crie', 'criar', 'gere', 'gerar', 'uma', 'para', 'novo', 'nova'].includes(cleanWord)) {
+            if (commonFeatureMap[cleanWord]) {
+              name = commonFeatureMap[cleanWord];
+              break;
+            }
+          }
+        }
+      }
+
+      // Se não encontrou nome, gerar um padrão baseado no tipo
+      if (!name) {
+        const typeNames = {
+          component: 'NewComponent',
+          hook: 'useNewHook',
+          service: 'NewService',
+          page: 'NewPage'
+        };
+        name = typeNames[type];
+      }
+
+      // Ajustar o caminho com base no tipo
+      let path = undefined;
+      switch (type) {
+        case 'component':
+          path = `src/components/${name}`;
+          break;
+        case 'hook':
+          path = 'src/hooks';
+          break;
+        case 'service':
+          path = 'src/services';
+          break;
+        case 'page':
+          path = `src/pages/${name}`;
+          break;
+      }
+
+      // Descrição é simplesmente a mensagem completa para contexto
+      const description = message;
+
+      return { name, type, description, path };
+    } catch (error) {
+      console.error("Erro ao extrair informações do artefato:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Analisa o conteúdo da mensagem do usuário para determinar se é uma solicitação
+   * de geração de código ou uma conversa normal
+   * @param message A mensagem do usuário para analisar
+   * @returns O resultado da análise
+   */
+  public async analyzeUserIntent(message: string): Promise<IntentAnalysisResult> {
+    return await this.promptClassifierAgent.analyzeUserIntent(message);
   }
 }

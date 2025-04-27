@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import OpenAI from 'openai';
+import { getCompleteSomaGuidelines } from '../shared/SomaGuidelines';
 
 export class OpenAIService {
   private openai: OpenAI | null = null;
@@ -173,9 +174,13 @@ export class OpenAIService {
    */
   async chat(userMessage: string): Promise<string> {
     console.log('OpenAIService: Chamando chat (via makeRequest)');
+
+    // Incluir diretrizes do Soma no prompt de sistema para garantir que as respostas respeitam o Soma
+    const somaGuidelines = getCompleteSomaGuidelines();
+
     // Usar um prompt de sistema que solicita respostas em Markdown bem formatado
     const systemPrompt = `
-      Você é um assistente de IA útil.
+      Você é um assistente de IA útil especializado em desenvolvimento React com o Design System Soma.
       Formate suas respostas sempre usando Markdown para melhor legibilidade:
 
       - Use **negrito** para destacar informações importantes
@@ -189,6 +194,10 @@ export class OpenAIService {
 
       Se fornecer exemplos de código, certifique-se de que estejam bem formatados, identados e sejam completos.
       Suas respostas devem ser informativas, precisas e bem estruturadas.
+
+      Quando responder sobre desenvolvimento React ou frontend, considere SEMPRE as seguintes diretrizes do Design System Soma:
+
+      ${somaGuidelines}
     `;
     return this.makeRequest(systemPrompt, userMessage);
   }
@@ -201,17 +210,6 @@ export class OpenAIService {
    */
   async generateCode(systemPrompt: string, userContent: string): Promise<string> {
     console.log('OpenAIService: Chamando generateCode (via makeRequest)');
-    return this.makeRequest(systemPrompt, userContent);
-  }
-
-  /**
-   * Realiza uma chamada genérica para análise de conformidade de design.
-   * @param systemPrompt O prompt do sistema (instruções para a IA).
-   * @param userContent O conteúdo do usuário (código para analisar, descrição).
-   * @returns A resposta de texto da API.
-   */
-  async analyzeDesignCompliance(systemPrompt: string, userContent: string): Promise<string> {
-    console.log('OpenAIService: Chamando analyzeDesignCompliance (via makeRequest)');
     return this.makeRequest(systemPrompt, userContent);
   }
 

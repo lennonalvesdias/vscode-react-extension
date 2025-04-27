@@ -166,205 +166,66 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       throw new Error("Serviços de IA não inicializados.");
     }
     try {
-      // Usar análise de intenção baseada em IA através do PromptClassifierAgent
-      console.log('Analisando intenção da mensagem com PromptClassifierAgent...');
+      // Usar processCodeGenerationRequest para determinar a intenção do usuário
+      console.log('Processando mensagem do usuário...');
 
       try {
-        const intentAnalysis = await this._codeGenerationService.analyzeUserIntent(text);
-        console.log(`Resultado da análise de intenção: ${intentAnalysis.isCodeGeneration ? 'GERAÇÃO DE CÓDIGO' : 'CONVERSA NORMAL'}`);
-        console.log(`Explicação: ${intentAnalysis.explanation}`);
+        // Criar um callback para exibir status em tempo real ao usuário
+        const statusCallback = (status: string) => {
+          // Adicionar mensagem de status como resposta do assistente, com prefixo de status
+          this.addMessage(status, 'assistant');
+        };
 
-        if (intentAnalysis.isCodeGeneration) {
-          // Adicionar mensagem informativa
-          this.addMessage(`🤖 Identifiquei que você deseja gerar código: ${intentAnalysis.explanation}`, 'assistant');
-          return await this._handleCodeGeneration(text);
+        const result = await this._codeGenerationService.processCodeGenerationRequest(text, statusCallback);
+
+        // Se for uma intenção de geração de código bem-sucedida
+        if (result.success && result.result) {
+          // Preparar a lista de arquivos gerados
+          const fileList = result.result.map(file => `- ${file.path}`).join('\n');
+
+          // Abrir o arquivo principal no editor
+          if (result.result.length > 0) {
+            try {
+              // Geralmente o primeiro arquivo é o principal (componente, hook, etc.)
+              const mainFile = result.result[0];
+              const mainFilePath = vscode.Uri.file(
+                vscode.workspace.workspaceFolders![0].uri.fsPath + '/' + mainFile.path
+              );
+              await vscode.workspace.openTextDocument(mainFilePath).then(doc => {
+                vscode.window.showTextDocument(doc);
+              });
+            } catch (openError) {
+              console.error('Erro ao abrir arquivo no editor:', openError);
+            }
+          }
+
+          // Adicionar mensagem informativa sobre o sucesso da geração
+          return `✅ Processo de geração concluído!\n\nArquivos criados:\n${fileList}\n\nO arquivo principal foi aberto no editor.`;
+        }
+        // Se for intenção de geração, mas houve algum erro específico
+        else if (!result.success && result.error) {
+          // Verificar se é um erro indicando que não é uma solicitação de geração
+          if (result.error.includes("não parece ser uma solicitação de geração de código")) {
+            // É uma mensagem de conversa normal, usar chat
+            return await this._openAIService.chat(text);
+          } else {
+            // Adicionar feedback sobre o erro antes de continuar com chat
+            this.addMessage(`❌ ${result.error}`, 'assistant');
+            return await this._openAIService.chat(text);
+          }
         }
 
+        // Fallback para chat padrão se algo inesperado acontecer
         return await this._openAIService.chat(text);
-      } catch (intentError) {
-        // Se ocorrer erro na análise de intenção, usar chat como fallback
-        console.warn('Erro na análise de intenção via PromptClassifierAgent, usando chat como fallback:', intentError);
-
+      } catch (error) {
+        // Erro no processamento, usar chat como fallback
+        console.warn('Erro ao processar intenção, usando chat como fallback:', error);
         return await this._openAIService.chat(text);
       }
     } catch (error) {
       console.error('Erro ao processar mensagem:', error);
       throw error;
     }
-  }
-
-  private async _handleCodeGeneration(text: string): Promise<string> {
-    if (!this._openAIService || !this._codeGenerationService) {
-      throw new Error("Serviços de IA não inicializados.");
-    }
-    try {
-      if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
-        return 'Não foi possível gerar o código porque nenhum workspace está aberto. Abra um projeto para gerar código.';
-      }
-
-      console.log('Identificando artefatos necessários a partir do texto...');
-      const artifacts = this._identifyRequiredArtifacts(text);
-
-      if (artifacts.length === 0) {
-        return "Não consegui identificar qual tipo de artefato (componente, página, hook, serviço) você deseja criar a partir da descrição. Por favor, seja mais específico.";
-      }
-
-      console.log(`Identificados ${artifacts.length} artefatos para geração`);
-
-      let confirmationMessage = `Vou gerar os seguintes artefatos com base na sua descrição:\n`;
-      artifacts.forEach(artifact => {
-        confirmationMessage += `- ${artifact.type}: ${artifact.name}\n`;
-      });
-
-      const confirmation = await vscode.window.showInformationMessage(
-        confirmationMessage + `\nDeseja continuar?`,
-        'Sim, gerar código',
-        'Cancelar'
-      );
-
-      if (confirmation !== 'Sim, gerar código') {
-        return 'Geração de código cancelada.';
-      }
-
-      console.log('Iniciando geração dos artefatos');
-
-      let allFiles: Array<{ path: string; content: string }> = [];
-
-      for (const artifact of artifacts) {
-        console.log(`Gerando artefato: ${artifact.type} - ${artifact.name}`);
-
-        try {
-          const files = await this._codeGenerationService.generateReactComponent({
-            name: artifact.name,
-            type: artifact.type,
-            description: this._createArtifactDescription(text, artifact),
-            path: artifact.path
-          });
-
-          allFiles = [...allFiles, ...files];
-          console.log(`Artefato ${artifact.name} gerado com sucesso: ${files.length} arquivos`);
-        } catch (artifactError) {
-          console.error(`Erro ao gerar artefato ${artifact.name}:`, artifactError);
-          throw artifactError;
-        }
-      }
-
-      const fileList = allFiles.map(file => `- ${file.path}`).join('\n');
-
-      console.log('Geração de código concluída com sucesso');
-
-      return `✅ Código gerado com sucesso!\n\nArquivos criados:\n${fileList}\n\nOs arquivos foram criados no workspace e abertos no editor.`;
-    } catch (error) {
-      console.error('Erro na geração de código:', error);
-      throw error;
-    }
-  }
-
-  private _identifyRequiredArtifacts(
-    text: string
-  ): Array<{ type: 'component' | 'hook' | 'service' | 'page', name: string, path?: string }> {
-    const lowerText = text.toLowerCase();
-    const artifacts: Array<{ type: 'component' | 'hook' | 'service' | 'page', name: string, path?: string }> = [];
-
-    let mainType: 'component' | 'hook' | 'service' | 'page' = 'component';
-    if (lowerText.includes('página') || lowerText.includes(' page')) {
-      mainType = 'page';
-    } else if (lowerText.includes('serviço') || lowerText.includes(' service')) {
-      mainType = 'service';
-    } else if (lowerText.includes(' hook') || lowerText.includes(' custom hook')) {
-      mainType = 'hook';
-    } else if (lowerText.includes('componente') || lowerText.includes(' component')) {
-      mainType = 'component';
-    }
-
-    const mainName = this._extractNameFromText(text, mainType) || (mainType.charAt(0).toUpperCase() + mainType.slice(1));
-    artifacts.push({ type: mainType, name: mainName });
-
-    if (mainType === 'page' && (lowerText.includes('serviço') || lowerText.includes(' service') || lowerText.includes(' api') || lowerText.includes(' dados'))) {
-      if (!artifacts.some(a => a.type === 'service')) {
-        let serviceName = `${mainName}Service`;
-        if (lowerText.includes('login') || lowerText.includes('auth')) { serviceName = 'AuthService'; }
-        if (lowerText.includes('user') || lowerText.includes('usuário')) { serviceName = 'UserService'; }
-        artifacts.push({ type: 'service', name: serviceName });
-      }
-    }
-
-    if (artifacts.length === 0) {
-      console.warn("Nenhum artefato identificado em _identifyRequiredArtifacts, retornando componente padrão.");
-      artifacts.push({ type: 'component', name: 'MyComponent' });
-    }
-
-    return artifacts;
-  }
-
-  private _extractNameFromText(text: string, type: string): string {
-    const lowerText = text.toLowerCase();
-
-    let patterns: RegExp[] = [];
-
-    switch (type) {
-      case 'page':
-        patterns = [
-          /página\s+de\s+([a-zA-Z]+)/i,
-          /página\s+([a-zA-Z]+)/i,
-          /([a-zA-Z]+)\s+page/i
-        ];
-        break;
-      case 'component':
-        patterns = [
-          /componente\s+de\s+([a-zA-Z]+)/i,
-          /componente\s+([a-zA-Z]+)/i,
-          /([a-zA-Z]+)\s+component/i
-        ];
-        break;
-      case 'service':
-        patterns = [
-          /serviço\s+de\s+([a-zA-Z]+)/i,
-          /serviço\s+([a-zA-Z]+)/i,
-          /([a-zA-Z]+)\s+service/i
-        ];
-        break;
-      case 'hook':
-        patterns = [
-          /hook\s+de\s+([a-zA-Z]+)/i,
-          /hook\s+([a-zA-Z]+)/i,
-          /use\s*([a-zA-Z]+)/i
-        ];
-        break;
-    }
-
-    for (const pattern of patterns) {
-      const match = text.match(pattern);
-      if (match && match[1]) {
-        return match[1].charAt(0).toUpperCase() + match[1].slice(1);
-      }
-    }
-
-    if (lowerText.includes('login')) { return 'Login'; }
-    if (lowerText.includes('cadastro')) { return 'Cadastro'; }
-    if (lowerText.includes('perfil')) { return 'Profile'; }
-    if (lowerText.includes('dashboard')) { return 'Dashboard'; }
-    if (lowerText.includes('produto')) { return 'Product'; }
-    if (lowerText.includes('lista')) { return 'List'; }
-    if (lowerText.includes('formulário')) { return 'Form'; }
-    if (lowerText.includes('autenticação')) { return 'Auth'; }
-
-    return '';
-  }
-
-  private _createArtifactDescription(text: string, artifact: { type: string, name: string }): string {
-    let description = text;
-
-    if (artifact.type === 'service' && text.toLowerCase().includes('página') &&
-      !text.toLowerCase().includes('serviço')) {
-      description += ` Este serviço deve fornecer as funcionalidades de backend necessárias para a página ${artifact.name}.`;
-    }
-
-    if (artifact.type === 'hook' && !text.toLowerCase().includes('hook')) {
-      description += ` Este hook deve encapsular a lógica de estado e comportamentos necessários.`;
-    }
-
-    return description;
   }
 
   private async _updateWebview() {

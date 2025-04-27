@@ -24,30 +24,33 @@ A arquitetura segue uma abordagem baseada em componentes do VS Code e serviços 
     - Lê as configurações do provedor (`psCopilot.provider`), credenciais (OpenAI API Key ou Azure Endpoint/API Key/Deployment Name) e parâmetros (modelo/deployment, temperatura, etc.) do `AgentContext`.
     - Inicializa o cliente `OpenAI` apropriado (padrão ou configurado para Azure) com base no provedor selecionado.
     - Valida se as credenciais necessárias para o provedor selecionado estão presentes.
-    - Expõe métodos genéricos (`chat`, `generateCode`, `generateTests`, `analyzeDesignCompliance`) que recebem prompts e os encaminham para o cliente `OpenAI` inicializado via `makeRequest`.
+    - Expõe métodos genéricos (`chat`, `generateCode`, `generateTests`) que recebem prompts e os encaminham para o cliente `OpenAI` inicializado via `makeRequest`.
 3.  **`FileService`**:
     - Abstrai operações de arquivo no workspace do usuário (criar, ler, atualizar, verificar existência) usando a API `vscode.workspace.fs`.
 4.  **`CodeGenerationService`**:
     - **Responsabilidade Principal:** Orquestra o fluxo de geração de código multiagente.
     - Recebe a solicitação de geração do `ChatViewProvider`.
-    - Instancia os agentes necessários (`DeveloperAgent`, `TestAgent`, `DesignAgent`, `PromptClassifierAgent`).
+    - Instancia os agentes necessários (`ArquitetoAgent`, `DeveloperAgent`, `TestAgent`, `PromptClassifierAgent`).
     - Chama os agentes em sequência (ou paralelo quando possível) para:
       - Analisar a intenção do usuário (`PromptClassifierAgent`).
-      - Gerar o código principal (`DeveloperAgent`).
+      - Criar um plano detalhado de desenvolvimento (`ArquitetoAgent`).
+      - Gerar o código principal seguindo o plano (`DeveloperAgent`).
       - Gerar os testes (`TestAgent`).
-      - Analisar a conformidade de design e acessibilidade (`DesignAgent`).
     - Utiliza o `FileService` para criar/atualizar os arquivos gerados no workspace.
-    - Monta a estrutura final dos arquivos (ex: adicionando análise de design como comentário, criando `index.ts`, `module.css`).
+    - Monta a estrutura final dos arquivos (ex: adicionando o plano de desenvolvimento como comentário, criando `index.ts`, `module.css`).
 5.  **Agentes (`src/agents`)**:
     - Cada agente encapsula uma especialidade específica.
     - **Responsabilidade Principal:** Construir o prompt (System Prompt e User Content) adequado para sua tarefa e chamar o método correspondente no `OpenAIService`.
     - Agentes Atuais:
       - `PromptClassifierAgent`: Determina se a intenção do usuário é gerar código ou simplesmente conversar.
-      - `DeveloperAgent`: Gera o código principal do componente/hook/serviço/página.
+      - `ArquitetoAgent`: Planeja a arquitetura e estrutura do código, criando um roadmap detalhado.
+      - `DeveloperAgent`: Implementa o código seguindo o plano criado pelo arquiteto.
       - `TestAgent`: Gera o código de teste (Jest/RTL).
-      - `DesignAgent`: Analisa a conformidade com o Design System Soma e acessibilidade.
-    - O diretório `src/agents` foi limpo, removendo agentes não utilizados no fluxo principal.
-6.  **Configuração (`package.json` e `settings`)**:
+6.  **Diretrizes Compartilhadas (`src/shared`)**:
+    - `SomaGuidelines.ts`: Centraliza as regras e componentes do Design System Soma.
+    - Fornece funções para obter partes específicas das diretrizes ou todas elas.
+    - Garante consistência entre os diferentes agentes ao usar o Design System Soma.
+7.  **Configuração (`package.json` e `settings`)**:
     - Define pontos de contribuição (comandos de abrir chat, views).
     - Permite ao usuário configurar:
       - `psCopilot.provider`: Escolher entre "openai" (padrão) ou "azure".
@@ -74,35 +77,41 @@ A arquitetura segue uma abordagem baseada em componentes do VS Code e serviços 
   - Seleção de modelo LLM via UI (`psCopilot.selectLLMModel`), que atualiza a configuração `psCopilot.model`.
   - Removidos comandos dedicados para configurar/limpar API Key.
 - **Geração de Código via Prompt:**
-  - Detecção de intenção de geração de código a partir da mensagem do usuário (`_isCodeGenerationRequest`).
+  - Detecção de intenção de geração de código a partir da mensagem do usuário (`PromptClassifierAgent`).
   - Identificação do(s) artefato(s) a ser(em) criado(s) (tipo, nome) diretamente da mensagem do usuário dentro do `ChatViewProvider` (`_identifyRequiredArtifacts`).
   - Confirmação do usuário antes da geração, listando os artefatos que serão criados.
   - Orquestração da geração multiagente via `CodeGenerationService`:
-    - `DeveloperAgent` gera o código principal.
+    - `ArquitetoAgent` cria o plano detalhado de desenvolvimento.
+    - `DeveloperAgent` implementa o código seguindo o plano do arquiteto.
     - `TestAgent` gera os testes.
-    - `DesignAgent` analisa a conformidade.
   - Criação dos arquivos correspondentes no workspace usando `FileService`.
   - Abertura automática do arquivo principal gerado no editor.
   - Feedback na interface sobre o sucesso ou falha da geração.
   - **Integração com Soma DS:** Os prompts dos agentes incluem diretrizes e a lista de componentes Soma.
-  - **Ferramentas Simuladas:** O prompt do `DeveloperAgent` instrui a IA a _agir como se_ usasse ferramentas `icon-list` e `component-documentation`.
+  - **Consistência no Frontend:** Garantia de que todo código frontend gerado respeite as diretrizes do Soma.
 - **Ícones Personalizados:**
   - Ícone principal (barra de atividades): Desenho de um mosqueteiro.
   - Ícone secundário (explorer view): Desenho de um balão de chat.
 
-## 4. Design System (Soma - via `soma.txt`)
+## 4. Design System (Soma - via `SomaGuidelines.ts`)
 
 - **Framework:** React
 - **Biblioteca de Componentes:** `@soma/react`
+- **Estrutura das Diretrizes:**
+  - `getSomaRules()`: Regras principais do Design System.
+  - `getSomaComponents()`: Lista de componentes disponíveis.
+  - `getCodeQualityGuidelines()`: Diretrizes de qualidade de código.
+  - `getCompleteSomaGuidelines()`: Consolidação de todas as diretrizes.
 - **Regras Principais:**
   - Usar apenas componentes Soma ou HTML nativo estilizado.
   - Importar de `@soma/react`.
   - Usar `SomaIcon` para ícones.
   - Preferir componentes de tipografia Soma (`SomaHeading`, etc.).
   - Estilização: Apenas `px` ou `%`, apenas redimensionamento/posicionamento em componentes Soma.
-- **Componentes Disponíveis:** Lista extensa definida em `soma.txt` (e agora incluída no prompt de geração).
-- **Ferramentas Mencionadas (Não implementadas):** `icon-list`, `component-documentation`.
-- **Formato de Saída Esperado da IA:** JSON com `files` (arquivo principal `./Page.jsx`).
+- **Integração:**
+  - Diretrizes incluídas no sistema de chat para respostas sobre desenvolvimento frontend.
+  - Utilizadas pelo `ArquitetoAgent` para planejar a estrutura do código.
+  - Seguidas pelo `DeveloperAgent` para implementar o código conforme o plano.
 
 ## 5. Evolução e Decisões Recentes
 
@@ -118,16 +127,14 @@ A arquitetura segue uma abordagem baseada em componentes do VS Code e serviços 
   - Atualização do `_processMessage` no `ChatViewProvider` para usar essa nova funcionalidade.
   - Implementação de fallback para o método baseado em padrões (`_isCodeGenerationRequest`) em caso de erro na análise via IA.
   - Feedback visual ao usuário sobre a decisão da IA antes de iniciar a geração de código.
+- **Arquitetura Multiagente Aprimorada:**
+  - Substituição do `DesignAgent` pelo novo `ArquitetoAgent` que cria um plano de desenvolvimento detalhado.
+  - Modificação do `DeveloperAgent` para implementar código com base no plano criado pelo `ArquitetoAgent`.
+  - Criação de um arquivo de diretrizes compartilhadas (`SomaGuidelines.ts`) que é usado por todos os agentes.
+  - Integração das diretrizes do Soma no chat regular para garantir que respostas sobre frontend sigam o Design System.
+  - Melhoria na qualidade do código gerado com foco na prevenção de erros estáticos.
 - **Correção de API Key:** Implementadas verificações robustas e carregamento/atualização da API Key nos serviços.
 - **Atualização de Ícones:** Ícones redesenhados.
-- **Integração do Design System Soma:** Regras e componentes Soma incluídos nos prompts dos agentes.
-- **Identificação da Necessidade de Agente de Design:** Mantida como um ponto para evolução futura.
-- **Refatoração de Agentes:**
-  - A lógica de construção de prompts foi delegada para classes de agente dedicadas (`DeveloperAgent`, `TestAgent`, `DesignAgent`) em `src/agents`.
-  - `OpenAIService` foi simplificado para atuar apenas como cliente da API OpenAI, recebendo prompts completos dos agentes.
-  - `CodeGenerationService` foi refatorado para orquestrar as chamadas aos agentes.
-  - Agentes e serviços não utilizados (`CoreCoordinator`, `AgentManagerService`, etc.) e o comando `manageAgents` foram removidos para simplificar a base de código.
-- **Resolução de Conflitos Pós-Refatoração:** Corrigidos erros de compilação (variáveis não usadas, chamadas de método incorretas) resultantes da refatoração dos agentes e serviços.
 - **Adição de Suporte a Azure OpenAI Service:**
   - Adicionadas configurações para o usuário definir o provedor (OpenAI/Azure) e as credenciais/endpoint do Azure.
   - `OpenAIService` foi refatorado para inicializar o cliente `openai` corretamente para o provedor selecionado (OpenAI ou Azure).
@@ -154,11 +161,26 @@ A arquitetura segue uma abordagem baseada em componentes do VS Code e serviços 
   - Remoção de cores fixas em favor de variáveis CSS derivadas do tema do VS Code.
   - Melhoria no contraste e legibilidade de elementos.
   - Esquema de cores unificado para cabeçalho, área de mensagens e campo de entrada.
+  - Implementação de variáveis CSS para todas as cores da interface, garantindo consistência visual.
+  - Ajustes nos botões, campos de texto e elementos interativos para seguir o estilo do VS Code.
 - **Componentes React Aprimorados:**
   - Criação de componentes dedicados para elementos específicos como botão de cópia de código.
   - Implementação de renderizadores personalizados para cada tipo de elemento markdown.
   - Uso de referências para acesso direto a elementos DOM críticos como o contêiner de mensagens.
   - Gerenciamento de estado otimizado para interações do usuário como cópia de código.
+- **Correções de Problemas de Layout:**
+  - Resolução do problema onde mensagens eram exibidas abaixo do campo de entrada.
+  - Implementação correta da estrutura de flex com ordem explícita para garantir o posicionamento dos elementos.
+  - Criação de uma classe `.messages-list` dedicada para agrupar as mensagens com espaçamento adequado.
+  - Ajuste da altura e dimensões dos contêineres para melhor utilização do espaço disponível.
+- **Melhoria na Renderização de Markdown:**
+  - Implementação de componentes personalizados para cada elemento markdown para garantir formatação consistente.
+  - Tratamento especial para blocos de código com detecção de linguagem e realce de sintaxe.
+  - Suporte a links externos que abrem em nova aba do navegador.
+  - Preservação da formatação de listas, tabelas e outros elementos complexos de markdown.
+- **Correção do Processamento de Solicitações de Geração:**
+  - Adição de uma implementação provisória no método `processCodeGenerationRequest` para evitar erros de linter.
+  - Esta implementação será substituída pela lógica completa em futuras atualizações.
 
 ### Serviços Detalhados
 
@@ -171,14 +193,15 @@ A arquitetura segue uma abordagem baseada em componentes do VS Code e serviços 
   - Métodos públicos (`chat`, `generateCode`, etc.) chamam `makeRequest` que usa o cliente `openai` já configurado.
 - **`CodeGenerationService.ts`**:
   - Recebe `AgentContext` no construtor.
-  - Instancia `OpenAIService`, `FileService`, `DeveloperAgent`, `TestAgent`, `DesignAgent`.
+  - Instancia `OpenAIService`, `FileService`, `ArquitetoAgent`, `DeveloperAgent`, `TestAgent`, `PromptClassifierAgent`.
   - Método `generateReactComponent`:
     - Valida a requisição.
+    - Chama `arquitetoAgent.createDevelopmentPlan`.
     - Chama `developerAgent.generateMainCode`.
-    - Chama `testAgent.generateTests` e `designAgent.analyzeDesign` (em paralelo).
+    - Chama `testAgent.generateTests` e `promptClassifierAgent.analyzeUserIntent` (em paralelo).
     - Chama `extractFiles` para montar os arquivos finais.
     - Chama `fileService` para criar/atualizar arquivos.
-  - Método `extractFiles`: Monta a estrutura de arquivos (`.tsx`, `.test.tsx`, `index.tsx`, `.module.css`) com base nos resultados dos agentes. Adiciona a análise de design como comentário.
+  - Método `extractFiles`: Monta a estrutura de arquivos (`.tsx`, `.test.tsx`, `index.tsx`, `.module.css`) com base nos resultados dos agentes. Adiciona o plano de desenvolvimento como comentário.
   - Método `generateBasicTest`: Gera um esqueleto de teste se o `TestAgent` falhar.
   - Método `getDefaultPath`: Retorna o caminho padrão com base no tipo e nome.
 - **`FileService.ts`**: Métodos assíncronos para interagir com `vscode.workspace.fs` (readFile, writeFile, stat, delete).
