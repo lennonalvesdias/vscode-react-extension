@@ -109,7 +109,8 @@
     "test:coverage": "jest --coverage",
     "build": "webpack --mode production",
     "build:dev": "webpack --mode development",
-    "build:watch": "webpack --mode development --watch"
+    "build:watch": "webpack --mode development --watch",
+    "package": "vsce package"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^5.16.5",

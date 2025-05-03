@@ -1,9 +1,17 @@
 import * as vscode from 'vscode';
 import OpenAI from 'openai';
 import { getCompleteSomaGuidelines } from '../shared/SomaGuidelines';
+import { getSomaComponentInfo, somaComponentTool } from '../functions/SomaFunction';
+import { getSomaIconsList, somaIconsTool } from '../functions/SomaIconsFunction';
 
 // Importar os tipos específicos da OpenAI
-import { ChatCompletionMessageParam } from 'openai/resources';
+import { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources';
+
+// Interface para definir os tools
+interface ChatOptions {
+  tools?: ChatCompletionTool[];
+  tool_choice?: 'auto' | 'none' | { type: 'function'; function: { name: string } };
+}
 
 export class OpenAIService {
   private openai: OpenAI | null = null;
@@ -138,45 +146,26 @@ export class OpenAIService {
     console.log('User Content (preview):', userContent.substring(0, 100) + '...');
     console.log('---------------------');
 
-    try {
-      const start = Date.now();
-      const completion = await this.openai.chat.completions.create({
-        model: this.model,
-        temperature: this.temperature,
-        max_tokens: this.maxTokens,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent }
-        ],
-      });
-      const duration = Date.now() - start;
-      console.log(`OpenAI request took ${duration}ms`);
+    const messages: ChatCompletionMessageParam[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent },
+    ];
 
-      const result = completion.choices[0]?.message?.content;
-      if (!result) {
-        throw new Error('Resposta inesperada da API OpenAI.');
-      }
-      console.log('--- OpenAI Response (preview) ---');
-      console.log(result.substring(0, 200) + '...');
-      console.log('---------------------');
-      return result;
-    } catch (error: any) {
-      console.error('Erro na chamada da API OpenAI:', error);
-      if (error.response) {
-        console.error('API Error Status:', error.response.status);
-        console.error('API Error Data:', error.response.data);
-      }
-      throw new Error(`Erro ao comunicar com a API OpenAI: ${error.message}`);
-    }
+    return this.makeCompletions(messages);
   }
 
   /**
    * Realiza uma chamada genérica para chat.
    * @param userMessage A mensagem do usuário.
    * @param chatHistory Histórico opcional de mensagens anteriores.
+   * @param options Opções adicionais para a chamada, incluindo tools.
    * @returns A resposta de texto da API em formato Markdown.
    */
-  async chat(userMessage: string, chatHistory: ChatCompletionMessageParam[] = []): Promise<string> {
+  async chat(
+    userMessage: string,
+    chatHistory: ChatCompletionMessageParam[] = [],
+    options: ChatOptions = {}
+  ): Promise<string> {
     console.log('OpenAIService: Chamando chat (via makeRequest)');
 
     // Incluir diretrizes do Soma no prompt de sistema para garantir que as respostas respeitam o Soma
@@ -212,50 +201,23 @@ export class OpenAIService {
     console.log('System Prompt (preview):', systemPrompt.substring(0, 100) + '...');
     console.log('User Content (preview):', userMessage.substring(0, 100) + '...');
     console.log('Chat History Length:', chatHistory.length);
+    console.log('Tools:', options.tools?.length || 0);
     console.log('---------------------');
 
-    try {
-      const start = Date.now();
+    // Preparar as mensagens incluindo histórico e a mensagem atual
+    const messages: ChatCompletionMessageParam[] = [
+      { role: 'system', content: systemPrompt }
+    ];
 
-      // Preparar as mensagens incluindo histórico e a mensagem atual
-      const messages: ChatCompletionMessageParam[] = [
-        { role: 'system', content: systemPrompt }
-      ];
-
-      // Adicionar histórico de mensagens, se existir
-      if (chatHistory.length > 0) {
-        messages.push(...chatHistory);
-      }
-
-      // Adicionar a mensagem atual do usuário
-      messages.push({ role: 'user', content: userMessage });
-
-      const completion = await this.openai.chat.completions.create({
-        model: this.model,
-        temperature: this.temperature,
-        max_tokens: this.maxTokens,
-        messages: messages,
-      });
-
-      const duration = Date.now() - start;
-      console.log(`OpenAI request took ${duration}ms`);
-
-      const result = completion.choices[0]?.message?.content;
-      if (!result) {
-        throw new Error('Resposta inesperada da API OpenAI.');
-      }
-      console.log('--- OpenAI Response (preview) ---');
-      console.log(result.substring(0, 200) + '...');
-      console.log('---------------------');
-      return result;
-    } catch (error: any) {
-      console.error('Erro na chamada da API OpenAI:', error);
-      if (error.response) {
-        console.error('API Error Status:', error.response.status);
-        console.error('API Error Data:', error.response.data);
-      }
-      throw new Error(`Erro ao comunicar com a API OpenAI: ${error.message}`);
+    // Adicionar histórico de mensagens, se existir
+    if (chatHistory.length > 0) {
+      messages.push(...chatHistory);
     }
+
+    // Adicionar a mensagem atual do usuário
+    messages.push({ role: 'user', content: userMessage });
+
+    return this.makeCompletions(messages);
   }
 
   /**
@@ -278,5 +240,119 @@ export class OpenAIService {
   async generateTests(systemPrompt: string, userContent: string): Promise<string> {
     console.log('OpenAIService: Chamando generateTests (via makeRequest)');
     return this.makeRequest(systemPrompt, userContent);
+  }
+
+  /**
+   * Realiza a chamada para a API OpenAI com as mensagens fornecidas.
+   * @param messages As mensagens a serem enviadas para a API.
+   * @returns A resposta da API.
+   * @throws Erro se a chamada falhar ou se a resposta não for válida.
+   * @private
+   * @description Este método é responsável por fazer a chamada real para a API OpenAI.
+   * Ele lida com a formatação das mensagens, o tratamento de erros e a lógica de chamadas de ferramentas.
+   * Se a resposta da API contiver chamadas de ferramentas, ele processa essas chamadas e faz uma nova requisição
+   * para obter a resposta final.
+   */
+  private async makeCompletions(messages: ChatCompletionMessageParam[]): Promise<string> {
+    this.validateProviderConfiguration();
+
+    if (!this.openai) {
+      throw new Error('OpenAI client not available');
+    }
+
+    try {
+      const start = Date.now();
+
+      // Primeira chamada com tools
+      const completion = await this.openai.chat.completions.create({
+        model: this.model,
+        temperature: this.temperature,
+        max_tokens: this.maxTokens,
+        messages: messages,
+        tools: [somaComponentTool, somaIconsTool],
+      });
+
+      const assistantMessage = completion.choices[0]?.message;
+      if (!assistantMessage) {
+        throw new Error('Resposta inesperada da API OpenAI.');
+      }
+
+      // Adiciona a mensagem do assistente ao histórico
+      messages.push(assistantMessage);
+
+      // Se houver tool calls, processa cada uma
+      if (assistantMessage.tool_calls?.length) {
+        console.log('Tool calls detected:', assistantMessage.tool_calls.length);
+
+        for (const toolCall of assistantMessage.tool_calls) {
+          let toolResponse;
+
+          try {
+            if (toolCall.function.name === 'getSomaComponent') {
+              const args = JSON.parse(toolCall.function.arguments);
+              toolResponse = await getSomaComponentInfo({
+                componentName: args.componentName,
+                variant: args.variant,
+                includeExamples: args.includeExamples,
+                version: args.version,
+              });
+            } else if (toolCall.function.name === 'getSomaIcons') {
+              toolResponse = await getSomaIconsList();
+            }
+
+            // Adiciona a resposta da tool ao histórico
+            messages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(toolResponse),
+            });
+          } catch (error) {
+            console.error(`Error executing tool ${toolCall.function.name}:`, error);
+            messages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({ error: `Failed to execute ${toolCall.function.name}` }),
+            });
+          }
+        }
+
+        // Segunda chamada para obter a resposta final com os resultados das tools
+        const followUpCompletion = await this.openai.chat.completions.create({
+          model: this.model,
+          temperature: this.temperature,
+          max_tokens: this.maxTokens,
+          messages: messages,
+        });
+
+        const finalResult = followUpCompletion.choices[0]?.message?.content;
+        if (!finalResult) {
+          throw new Error('Resposta inesperada da API OpenAI no follow-up.');
+        }
+
+        const duration = Date.now() - start;
+        console.log(`OpenAI request took ${duration}ms`);
+        return finalResult;
+      }
+
+      // Se não houver tool calls, retorna a resposta direta
+      const result = assistantMessage.content;
+      if (!result) {
+        throw new Error('Resposta inesperada da API OpenAI.');
+      }
+
+      const duration = Date.now() - start;
+      console.log(`OpenAI request took ${duration}ms`);
+      console.log('--- OpenAI Response (preview) ---');
+      console.log(result.substring(0, 200) + '...');
+      console.log('---------------------');
+      return result;
+    } catch (error: any) {
+      console.error('Erro na chamada da API OpenAI:', error);
+      if (error.response) {
+        console.error('API Error Status:', error.response.status);
+        console.error('API Error Data:', error.response.data);
+      }
+      throw new Error(`Erro ao comunicar com a API OpenAI: ${error.message}`);
+    }
   }
 }
